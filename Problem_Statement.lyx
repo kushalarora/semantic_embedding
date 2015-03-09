@@ -1,0 +1,728 @@
+#LyX 2.0 created this file. For more info see http://www.lyx.org/
+\lyxformat 413
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\default_output_format default
+\output_sync 1
+\bibtex_command default
+\index_command default
+\float_placement H
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_amsmath 1
+\use_esint 1
+\use_mhchem 1
+\use_mathdots 1
+\cite_engine basic
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Continuous Word and Phrase Representation with Semantic Structure
+\end_layout
+
+\begin_layout Author
+Kushal Arora, karora@cise.ufl.edu
+\end_layout
+
+\begin_layout Abstract
+A lot of recent supervised NLP systems use the unsupervised word embeddings
+ to improve generalization.
+ Most of these models use single word representation which fails to capture
+ both the compositionality and longer context dependencies which are inherent
+ to languages.
+ One of the ways to overcome this lacunae is to learns both word and phrase
+ embeddings as well as their compositional semantics.
+ This proposal puts forward a recursive model which learns these phrase
+ embedding as well as compositional operator and probability measure on
+ them.
+ To capture the context dependecies, the model proposes explicit usage based
+ clustering of words and phrases similar to class based models.
+ The model will be evaluated for regularities using analogy task and componsitio
+nality through perplexity on unknown sentences.
+ 
+\end_layout
+
+\begin_layout Section*
+Motivation
+\end_layout
+
+\begin_layout Standard
+What are the characteristics of a ideal continous space language model?
+ This paper proposes the following 1.) good generalization for unknown sentences,
+ 2.) compositionality i.e.
+ ability to discover phrase embedding using sub-phrases embedding and 3.)
+ linguistic regularities among embeddings like clustering of semantically
+ similar words and phrases and symmetry for syntactically similar ones.
+ We will now consider each one of these characteristics in details and see
+ how the proposed model enforces these properties.
+\end_layout
+
+\begin_layout Subsection*
+Linguistic Regularity
+\end_layout
+
+\begin_layout Standard
+Most of the continuous models are able to capture the linguistic regularities
+ to some extent.
+ These properties have been evaluated by 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "turian2010word,mikolov2013linguistic,jeffreypenningtonglove"
+
+\end_inset
+
+ using syntactic and semantic analogy tasks.
+ These models learn regularities implicitly with focus on improving next
+ word prediction.
+ Class based models as proposed by 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "brown1992class"
+
+\end_inset
+
+ learn regularities explicitly in attempt to improve generalization of n-gram
+ models.
+ Proposed model attempts to capture the essence of the class based models
+ in NNLM setting.
+ This is done by clustering words and phrases which are used in same context.
+ These constraints would lead to representation which should performs better
+ on analogy tasks and provide better results for standard NLP tasks like
+ NER, Chunking and POS tagging.
+ 
+\end_layout
+
+\begin_layout Subsection*
+Compositionality
+\end_layout
+
+\begin_layout Standard
+Languages are recursive in nature.
+ Words combine to build phrases and phrases, to build sentences.
+ The proposed model attempts to capture this recursive compositionality
+ by learning operators on words and phrases.
+ This can help us in representing unknown sentences and phrases in embedding
+ space and assign them a probability.
+ At the same time regularity constraint on phrases can help us infer the
+ meaning of the phrase using the neighboring embeddings.
+ Similar compositional and multi-word embedding approach has been tried
+ by Socher et al
+\begin_inset CommandInset citation
+LatexCommand cite
+key "socher2012semantic,socher2011semi,socher2010learning"
+
+\end_inset
+
+.
+ The proposed model differs from their approach mainly in two ways.
+ Firstly, their model focuses on supervised sentiment classification whereas
+ the attempt here is to learn unsupervised word embeddings.
+ Secondly, they learnt compositionality and embedding of only those phrases
+ which maximized their objective.
+ On the contrary, we attempt to embed all sub-phrases in the continous space.
+ The proposed model is more general in its attempt and produces embeddings
+ and operators which can be used for supervised tasks including sentiment
+ classification.
+\end_layout
+
+\begin_layout Subsection*
+Generalization
+\end_layout
+
+\begin_layout Standard
+The standard n-gram models represented words and phrases in a discrete space.
+ This prevents the true interpolation of probabilities of unseen n-grams
+ since a change in this word space can result in an arbitrary change of
+ the n-gram probability.
+ Continuous space approaches tries to solve this problem by projecting words
+ in continuous space and using a probability estimator on it.
+ This leads to better generalization as shown by 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "bengio2006neural,mikolov2010recurrent,schwenk2006continuous"
+
+\end_inset
+
+.
+ This paper proposes a way to improve generalization further using the regularit
+ies and compositionality.
+ By assigning propobabilities to multi-word embeddings and using compositionalit
+y to learn probability on unknown sentences, the proposed model can improve
+ state of the art results in language modelling.
+ 
+\end_layout
+
+\begin_layout Section*
+Model Architecture 
+\end_layout
+
+\begin_layout Standard
+The approach is to build a model that can be trained layer-wise to get best
+ representation for the composed phrases.
+ Each layer in model corresponds to phrases of length 
+\begin_inset Formula $l$
+\end_inset
+
+ built by appending a word to the sub-phrase of length 
+\begin_inset Formula $l-1$
+\end_inset
+
+.
+ Other way of seeing this is that, at each layer a composition operator
+ 
+\begin_inset Formula $g_{l}(\dot{·)}$
+\end_inset
+
+ uses two sub-phrases of length 
+\begin_inset Formula $l-1$
+\end_inset
+
+ and 
+\begin_inset Formula $1$
+\end_inset
+
+ to compose a phrase of length 
+\begin_inset Formula $l$
+\end_inset
+
+.
+ Each operator returns two things an embedding for the phrase and its probabilit
+y.
+ The probability of words at layer 0 are computed from the corpus.
+ Figure 1 shows the composition architecture for an example sentence.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename /home/karora/Dropbox/NLU/nn1.eps
+	scale 50
+	BoundingBox 0bp 0bp 612bp 400bp
+	rotateOrigin center
+
+\end_inset
+
+
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Composition network of a sentence
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Let 
+\begin_inset Formula $N$
+\end_inset
+
+ be the maximum number of words a sentence model can handle.
+ Let 
+\begin_inset Formula $w_{i}^{l}$
+\end_inset
+
+, 
+\begin_inset Formula $x_{i}^{l}$
+\end_inset
+
+ be the 
+\begin_inset Formula $i$
+\end_inset
+
+th phrase of length 
+\begin_inset Formula $l$
+\end_inset
+
+ and its embedding.
+ The length of 
+\begin_inset Formula $l$
+\end_inset
+
+th layer is 
+\begin_inset Formula $N-l$
+\end_inset
+
+ nodes.
+ Each layer is parameterized by a matrix 
+\begin_inset Formula $W_{dX2d}^{l}$
+\end_inset
+
+, where 
+\begin_inset Formula $d$
+\end_inset
+
+ is the dimension of the embedding space.
+ Composition function for the phrase 
+\begin_inset Formula $x_{i}^{l}$
+\end_inset
+
+ is as 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+x_{i}^{l}=g(x_{i}^{l-1},x_{i+l}^{1};W^{l})\label{eq:g_raw}
+\end{equation}
+
+\end_inset
+
+The unnormalized probability of 
+\begin_inset Formula $x_{i}^{l}$
+\end_inset
+
+ can be is impacted by the prior probability of 
+\begin_inset Formula $x_{i}^{l}$
+\end_inset
+
+and 
+\noun on
+
+\begin_inset Formula $x_{i+l}^{1}$
+\end_inset
+
+
+\noun default
+ and how these two come together to form 
+\begin_inset Formula $x_{i}^{l}$
+\end_inset
+
+.
+ The composition factor is captured by the parameter 
+\begin_inset Formula $W_{dXd}^{prob}$
+\end_inset
+
+.
+ Unnormalized probability is calculated in the following way 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\tilde{p}_{i}^{l}=f(x_{l}^{l},x_{i+l}^{1},p_{i}^{l-1},p_{i+l}^{1};W^{prob})\label{eq:p_raw}
+\end{equation}
+
+\end_inset
+
+Proposed function for 
+\begin_inset Formula $g(·)$
+\end_inset
+
+ and 
+\begin_inset Formula $f(\text{·})$
+\end_inset
+
+ are 
+\begin_inset Formula $tanh$
+\end_inset
+
+ and 
+\begin_inset Formula $sigmoid$
+\end_inset
+
+.
+ All the embeddings are initialized using normal distribution 
+\begin_inset Formula ${\normalcolor \mathcal{N}}(0,1)$
+\end_inset
+
+.
+ Probability for words in layer 0 is the calculated from the corpus and
+ is kept fixed.
+ Rewriting 
+\begin_inset Formula $\ref{eq:g_raw}$
+\end_inset
+
+ and 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "eq:p_raw"
+
+\end_inset
+
+
+\begin_inset Formula 
+\begin{equation}
+x_{i}^{l}=tanh(W^{l}\begin{bmatrix}x_{i}^{l-1}\\
+x_{i+l}^{1}
+\end{bmatrix})\label{eq:g_tanh}
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\tilde{p}_{i}^{l}=sigmoid(x_{i}^{l-1}\cdot W_{prob}\cdot x_{i+l}^{1}*p_{i}^{l-1}*p_{i+l}^{1})\label{eq:f_tanh}
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The training is done in a layer-wise fashion by minimizing the cross entropy
+ between the original distribution of phrases of length 
+\begin_inset Formula $l$
+\end_inset
+
+ and probability distribution of the composed phrases.
+ The original distribution is calculated using n-grams from the corpus.
+ 
+\end_layout
+
+\begin_layout Section*
+Objective Function
+\end_layout
+
+\begin_layout Standard
+The objective function is composed in such a way that all three characteristics
+ we defined for ideal language model are explicitly expressed.
+ In this section, composition of the objective function is discussed step
+ by step incorporating each of these properties.
+\end_layout
+
+\begin_layout Standard
+Let 
+\begin_inset Formula $S$
+\end_inset
+
+ be the training corpus, 
+\begin_inset Formula $w_{ji}^{l}$
+\end_inset
+
+ be the 
+\begin_inset Formula $i$
+\end_inset
+
+th word of the 
+\begin_inset Formula $j$
+\end_inset
+
+th sentence of the corpus.
+ Let 
+\begin_inset Formula $W^{l}$
+\end_inset
+
+ be set of the all phrases of length 
+\begin_inset Formula $l$
+\end_inset
+
+ and 
+\begin_inset Formula $X^{l}$
+\end_inset
+
+be the set of embedding of phrases of length 
+\begin_inset Formula $l$
+\end_inset
+
+.
+ Let 
+\begin_inset Formula $P(w_{ji}^{l})$
+\end_inset
+
+ be the original probability of 
+\begin_inset Formula $w_{ji}^{l}$
+\end_inset
+
+.
+ The loss function for cross entropy minimization function for layer 
+\begin_inset Formula $l$
+\end_inset
+
+ is defined as
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\mathcal{L}_{1}^{l}(\theta)=\sum\limits _{j=1}^{|S|}\sum\limits _{i=1}^{N-l}H(P(w_{ji}^{l})||p_{ji}^{l};\theta)
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+As the model is learns the unnormalized probability, an additional normalization
+ constraint 
+\begin_inset Formula $\sum_{x^{l}\in X^{l}.}\tilde{p_{x^{l}}}=1$
+\end_inset
+
+ is enforced.
+ So the objective function now becomes
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\mathcal{L}_{1}^{l}(\theta)=\sum\limits _{j=1}^{|S|}\sum\limits _{i=1}^{N-l}H(P(w_{ji}^{l})||p_{ji}^{l};\theta)+\sum_{w^{l}\in W^{l}.}\tilde{p_{w^{l}}}=1
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+A dense embedding space would lead to a better generalization.
+ To achieve this, this model minimize the spread of 
+\begin_inset Formula $l$
+\end_inset
+
+th layer by reducing the distance of individual point from the centroid
+ of the layer.
+ Let 
+\begin_inset Formula $\tilde{x^{l}}$
+\end_inset
+
+be the centroid of the embedding of length 
+\begin_inset Formula $l$
+\end_inset
+
+ phrases.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\mathcal{L}_{2}^{l}(\theta)=\sum_{j=1}^{|S|}\sum_{i=1}^{N-l}||x_{ji}^{l}-\tilde{x}^{l};\theta||^{2}
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+One of the properties of the ideal embedding would be meaningful regularities
+ as perceived by us.
+ For example, we perceive words and phrases used in same context to be similar
+ or close.
+ Taking cue from that, this model implicitly learns syntactic and semantic
+ relations like synonyms, plural and singular forms,and possessive and non
+ possessive forms using an explicit clustering objective.
+ This is done by clustering all the words used in conjugation with a phrase
+ and all phrases used in conjugation with a word in embedding space.
+ Let 
+\begin_inset Formula $m_{x^{l}/x^{l-1}}$
+\end_inset
+
+be the mean of embeddings of all the words(length 1) used with phrase 
+\begin_inset Formula $x^{l-1}$
+\end_inset
+
+ to create phrase in 
+\begin_inset Formula $X^{l}$
+\end_inset
+
+ and 
+\begin_inset Formula $m_{x^{l}/x^{1}}$
+\end_inset
+
+ be mean of embeddings of all the phrases used with the word 
+\begin_inset Formula $x^{1}$
+\end_inset
+
+ to form phrase in 
+\begin_inset Formula $X^{l}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\mathcal{L}_{3}^{l}(\theta)=\sum_{x^{l-1}\in X^{l-1}}\sum_{\substack{x^{1}\in X^{1}\\
+g(x^{l-1},x^{1})\in X^{l}
+}
+}||x^{1}-m_{x^{l}/x^{l-1};}\theta||^{2}+\sum_{x^{1}\in X^{1}}\sum_{\substack{x^{l-1}\in X^{l-1}\\
+g(x^{l-1},x^{1})\in X^{l}
+}
+}||x^{l-1}-m_{x^{l}/x^{1}};\theta||^{2}
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Finally, bringing all of it together, we get 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{equation}
+\mathcal{L}^{l}(\theta)=\mathcal{L}_{1}^{l}(\theta)+\lambda_{1}\mathcal{L}_{2}^{l}(\theta)+\lambda_{2}\mathcal{L}_{3}^{l}(\theta)
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The parameter 
+\begin_inset Formula $\theta$
+\end_inset
+
+ we train on are 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\theta^{l}=[W^{prob},W^{l},X^{l-1},X^{1}]
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We can layer-wise train for each layer 
+\begin_inset Formula $l$
+\end_inset
+
+ and use the minimizing negative log likelihood of training sentences as
+ the stopping criteria.
+ 
+\end_layout
+
+\begin_layout Standard
+Another way to look at 
+\end_layout
+
+\begin_layout Section*
+Evaluation Criteria
+\end_layout
+
+\begin_layout Standard
+We evaluate our model on two type of tasks.
+ The first type is the standard task of evaluating the perplexity of the
+ unseen test corpus.
+ This tasks test the compositionality and generalization abilities of our
+ model.
+ We will report the use perplexity as the measure in this type of evaluation
+ as done by 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "bengio2006neural,mikolov2010recurrent,mikolov2013distributed,schwenk2006continuous"
+
+\end_inset
+
+ The second type is to evaluate semantic and syntactic ability of words
+ and phrase embeddings.
+ WordSim-353
+\begin_inset CommandInset citation
+LatexCommand cite
+key "finkelstein2001placing"
+
+\end_inset
+
+ is one of most used dataset for the evaluating similarities among the words.
+ Other similarity tasks/datasets that can be evaluated are SCWS
+\begin_inset CommandInset citation
+LatexCommand cite
+key "huang2012improving"
+
+\end_inset
+
+ and RW
+\begin_inset CommandInset citation
+LatexCommand cite
+key "luong2013better"
+
+\end_inset
+
+.
+ We can also use dataset provided by 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "mikolov2013linguistic"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset bibtex
+LatexCommand bibtex
+bibfiles "NLU"
+options "plain"
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
