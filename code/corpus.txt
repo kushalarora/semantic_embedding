@@ -1,0 +1,28 @@
+Bengio2003 -
+    Brown Corpus
+        1,181,041 words, 800,000 words for training, 200,000 for validation, 181,041 for testing
+        Vocab size 47,578 incl punctuation, both upper and lower case, and including the syntactical marks used to separate texts and paragraphs
+        Rare words with frequency ≤ 3 were merged into a single symbol
+        the vocabulary size to |V | = 16, 383
+
+    Associated Press 1995-1996
+        Training -14 million (13,994,528) words, Validation - 1 million words(963,138), Test - 1 million (963,071) words
+        |V| = 148,721 words originally. Reduced to |V|=17964 keeping most frequest words, lowecase, numeric form to special symbols
+        rare words to special symbols, proper noun to special symbol
+
+        \epsilon = 10^-3 and \epsilon_t = \frac{\epsilon_0}{1+r_t} where t is epoch and r is decreasing factor. r = 10^-8
+
+
+        Perplexity on brown(test) = 252
+        Perplexity on AP News (test) = 109
+
+
+    Heirarichal NNLM
+        Brown Corpus
+        1,105,515 words 900,000 training, 100,000 validation 105,515 testing
+        20-30 epochs
+        Perplexity 220 / original - 195.3
+
+
+    Linguistic Regularities
+
