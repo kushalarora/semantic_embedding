@@ -31,6 +31,4 @@ if __name__ == "__main__":
             args.test is None:
         raise ValueError('Test file missing')
 
-    data = build_vocab(args.train)
-    import pdb
-    pdb.set_trace()
+    data = build_vocab(args.train, args.L)
