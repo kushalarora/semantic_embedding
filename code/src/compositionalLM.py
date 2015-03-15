@@ -108,15 +108,16 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
 
     n_valid = len(S_valid)
 
+
     numpy_rng = np.random.RandomState(123)
 
     V_len = len(V)
 
     X_initial = np.asarray(
         numpy_rng.uniform(
-            low=-4/np.sqrt(6/V_len),
-            high=4/np.sqrt(6/V_len),
-            size=(n, V_len)
+            low=-4 *np.sqrt(6./V_len),
+            high=4 * np.sqrt(6./V_len),
+            size=(V_len, n)
         ),
         dtype=theano.config.floatX)
 
@@ -137,14 +138,12 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
 
     prob_fns, embed_fns = cLM.prob_embedding_fn()
 
-    import pdb
-    pdb.set_trace()
     ###############
     # TRAIN MODEL #
     ###############
     print '... training the model'
 
-    best_validation_prob = 0
+    best_validation_pp = np.inf
 
     done_looping = False
     epoch = 0
@@ -182,35 +181,39 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
             print 'completed in %.2f (sec) <<\r' % (time.time() - tic),
             sys.stdout.flush()
 
+
         tic = time.time()
-        valid_prob = 0.0
+        t = 1.0
+        X_vals = X.get_value(borrow=True)
+        P_vals = P.get_value(borrow=True)
+        print "..validating model"
         for i, sentence in enumerate(S_valid):
-            x = X[sentence]
-            x0 = X[sentence]
-            p = P[sentence]
-            p0 = P[sentence]
+            x = X_vals[sentence]
+            x0 = X_vals[sentence]
+            p = P_vals[sentence]
+            p0 = P_vals[sentence]
 
             for j in xrange(len(sentence) - 1):
                 x = embed_fns[j](x, x0)
                 p = prob_fns[j](x, x0, p, p0)
-            valid_prob *= p
+            t /= p[0]
 
-            print '[learning composition] epoch %i >> %2.2f%%' % (
+            print '[validating model] t=%2.2f epoch %i >> %2.2f%%' % (t,
                 epoch, (i + 1) * 100. / n_valid)
             print 'completed in %.2f (sec) <<\r' % (time.time() - tic),
             sys.stdout.flush()
 
+        valid_pp = pow(t, 1./len(S_train))
         # if we got the best validation score until now
-        if valid_prob > best_validation_prob:
-
-            best_validation_prob = valid_prob
+        if valid_pp < best_validation_pp:
+            print "current best pp at epoch: %d: %2.2f%%" % (epoch, valid_pp)
+            best_validation_pp = valid_pp
             # test it on the test set
-
     print(
         (
             'Optimization complete with best validation score of %f %%,'
         )
-        % (best_validation_prob)
+        % (best_validation_pp)
     )
 
 

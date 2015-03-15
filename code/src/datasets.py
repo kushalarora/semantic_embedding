@@ -67,6 +67,15 @@ def index_data(filename, Vindex):
         words = line.split()
         sentence = []
 
+        missing_vocab = False
+        for word in words:
+            if word not in Vindex:
+                missing_vocab = True
+                break
+
+        if missing_vocab:
+            continue
+
         for word in words:
 
             try:
