@@ -60,7 +60,8 @@ class CompositionalLM:
         comp_train_fns = []
         embed_train_fns = []
 
-        for layer in self.hidden_layers:
+        for i, layer in enumerate(self.hidden_layers):
+            print ".. Building train model for layer: %i" % i
             comp_train_fns.append(layer.get_composition_training_fn())
             embed_train_fns.append(layer.get_embedding_train_fn())
 
@@ -70,7 +71,8 @@ class CompositionalLM:
         prob_fns = []
         embed_fns = []
 
-        for layer in self.hidden_layers:
+        for i, layer in enumerate(self.hidden_layers):
+            print ".. Building valid model for layer: %i" % i
             prob_fns.append(layer.get_prob_fn())
             embed_fns.append(layer.get_embedding_fn())
 
@@ -78,7 +80,7 @@ class CompositionalLM:
 
 
 def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
-          dataset_train='../data/train', dataset_valid='../data/valid',
+          dataset_train='../data/train1', dataset_valid='../data/valid1',
           batch_size=600):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear
@@ -213,4 +215,4 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
 
 
 if __name__ == "__main__":
-    train(L=50)
+    train(n=2, L=10)

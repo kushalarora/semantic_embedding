@@ -64,7 +64,6 @@ def index_data(filename, Vindex):
     S = []
     for line in fin:
 
-        print "... processing line %s" % line
         words = line.split()
         sentence = []
 
@@ -73,7 +72,6 @@ def index_data(filename, Vindex):
             try:
                 id = Vindex[word]
             except KeyError:
-                print "Error:: %s missing from vocab" % word
                 continue
 
             if id is None:

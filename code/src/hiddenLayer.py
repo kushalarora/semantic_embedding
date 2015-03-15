@@ -129,9 +129,9 @@ class HiddenLayer:
 
         """
 
-        w_l_1 = T.ivector('w_l_1')
-        w_1 = T.ivector('w_1')
-        w_l = T.ivector('w_l')
+        w_l_1 = T.lvector('w_l_1')
+        w_1 = T.lvector('w_1')
+        w_l = T.lvector('w_l')
 
         X_l_1 = self.X[w_l_1]
         X_1 = self.X[w_1]
@@ -144,7 +144,7 @@ class HiddenLayer:
 
         P_le = self._get_compositional_probability(X_l_1, X_1, P_l_1, P_1)
 
-        L = T.nnet.categorical_crossentropy(P_le, P_l)
+        L = T.nnet.categorical_crossentropy(P_le[:-self.l], P_l[:-self.l]) + P_le[:-self.l].sum()
 
         cost = T.mean(L)
 
@@ -161,9 +161,9 @@ class HiddenLayer:
 
     def get_embedding_train_fn(self):
 
-        w_l_1 = T.ivector('w_l_1')
-        w_1 = T.ivector('w_1')
-        w_l = T.ivector('w_l')
+        w_l_1 = T.lvector('w_l_1')
+        w_1 = T.lvector('w_1')
+        w_l = T.lvector('w_l')
 
         X_l_1 = self.X[w_l_1]
         X_1 = self.X[w_1]
@@ -172,7 +172,7 @@ class HiddenLayer:
 
         lr = T.dscalar('lr')
 
-        cost = T.sum(T.sqr(X_l - X_le))
+        cost = T.sum(T.sqr(X_l[:-self.l] - X_le[:-self.l]))
 
         gparams = [T.grad(cost, param)
                    for param in self.embed_params]
@@ -206,8 +206,8 @@ if __name__ == '__main__':
 
     hl = HiddenLayer(
         np.random.RandomState(3),
-        None,
-        None,
+        theano.shared(np.random.normal(size=(6, 2))),
+        theano.shared(np.random.normal(size=(6,))),
         n=2)
 
     print "W_prob: %s\tb_prob: %s\tW_l: %s\tb_l: %s " % (
@@ -216,8 +216,6 @@ if __name__ == '__main__':
         hl.W_l.get_value(),
         hl.b_l.get_value())
 
-    import pdb
-    pdb.set_trace()
 
     fe = hl.get_embedding_fn()
     print fe([[1, 0], [1, 0], [1, 0], [1, 0]],
@@ -228,3 +226,12 @@ if __name__ == '__main__':
              np.matrix([[1, 0], [1, 0], [1, 0]]),
              [0.5, 0.5, 0.5],
              [0.1, 0.1, 0.1])
+
+    fpt = hl.get_composition_training_fn()
+    print fpt([1,2,3], [0, 1,2], [2,3,1], 0.1)
+
+    import pdb
+    pdb.set_trace()
+
+    fet = hl.get_embedding_train_fn()
+    print fpt([1,2,3], [0, 1,2], [2,3,1], 0.1)
