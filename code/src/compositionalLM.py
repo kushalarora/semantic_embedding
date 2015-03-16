@@ -79,8 +79,8 @@ class CompositionalLM:
         return (prob_fns, embed_fns)
 
 
-def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
-          dataset_train='../data/train', dataset_valid='../data/valid',
+def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
+          dataset_train='../data/train1', dataset_valid='../data/valid1',
           batch_size=600):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear
@@ -153,7 +153,6 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
         epoch = epoch + 1
 
         np.random.shuffle(S_train)
-
         te_cost = 0.0
         for i, sentence in enumerate(S_train):
             e_cost = 0.0
@@ -163,7 +162,7 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
                                    sentence[j+1],
                                    learning_rate,
                                    0.2)
-                e_cost += np.log(cost)
+                e_cost += cost
             te_cost += e_cost
 
             print '[learning embedding] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
@@ -213,7 +212,7 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
                 epoch, (i + 1) * 100. / n_train, time.time() - tic, t),
             sys.stdout.flush()
 
-        valid_pp = pow(t, 1./len(S_train))
+        valid_pp = pow(t, 1./n_valid)
         print '[validation] epoch %i >> %2.2f%% completed in %.2f (sec) T cost >> %2.2f <<' % (
             epoch, (i + 1) * 100. / n_train, time.time() - tic, valid_pp)
 
@@ -231,4 +230,4 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
 
 
 if __name__ == "__main__":
-    train(n=10, L=50)
+    train(n=10, L=10)
