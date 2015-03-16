@@ -70,6 +70,7 @@ def index_data(filename, Vindex):
         missing_vocab = False
         for word in words:
             if word not in Vindex:
+                print "Missing: (%s, ##%s##)" % (word, line)
                 missing_vocab = True
                 break
 

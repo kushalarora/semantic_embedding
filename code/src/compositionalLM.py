@@ -80,7 +80,7 @@ class CompositionalLM:
 
 
 def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
-          dataset_train='../data/train1', dataset_valid='../data/valid1',
+          dataset_train='../data/train', dataset_valid='../data/valid',
           batch_size=600):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear
@@ -134,7 +134,7 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
     cLM = CompositionalLM(
         numpy_rng, X, P, n, L)
 
-    c_fns, e_fns = cLM.training_fns()
+    e_fns, c_fns = cLM.training_fns()
 
     prob_fns, embed_fns = cLM.prob_embedding_fn()
 
@@ -154,33 +154,44 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
 
         np.random.shuffle(S_train)
 
-        e_cost = 0.0
+        te_cost = 0.0
         for i, sentence in enumerate(S_train):
+            e_cost = 0.0
             for j in xrange(len(sentence) - 1):
-                e_cost += e_fns[j](sentence[j],
+                cost, _ = e_fns[j](sentence[j],
                                    sentence[0],
                                    sentence[j+1],
-                                   learning_rate)
+                                   learning_rate,
+                                   0.2)
+                e_cost += np.log(cost)
+            te_cost += e_cost
 
-            print '[learning embedding] epoch %i >> %2.2f%%' % (
-                epoch, (i + 1) * 100. / n_train)
-            print 'completed in %.2f (sec) <<\r' % (time.time() - tic),
+            print '[learning embedding] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                epoch, (i + 1) * 100. / n_train, time.time() - tic, e_cost),
             sys.stdout.flush()
+
+        print '[learning embedding] epoch %i >> %2.2f%% completed in %.2f (sec) T cost >> %2.2f <<\r' % (
+            epoch, (i + 1) * 100. / n_train, time.time() - tic, te_cost)
+        sys.stdout.flush()
 
         tic = time.time()
-        c_cost = 0.0
+        tc_cost = 0.0
         for i, sentence in enumerate(S_train):
+            c_cost = 0.0
             for j in xrange(len(sentence) - 1):
-                c_cost += c_fns[j](sentence[j],
+                cost, _ = c_fns[j](sentence[j],
                                    sentence[0],
                                    sentence[j+1],
                                    learning_rate)
+                c_cost += np.sqrt(cost)
+            tc_cost += c_cost
 
-            print '[learning composition] epoch %i >> %2.2f%%' % (
-                epoch, (i + 1) * 100. / n_train)
-            print 'completed in %.2f (sec) <<\r' % (time.time() - tic),
+            print '[learning composition] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                epoch, (i + 1) * 100. / n_train, time.time() - tic, c_cost),
             sys.stdout.flush()
 
+        print '[learning composition] epoch %i >> %2.2f%% completed in %.2f (sec) T cost >> %2.2f <<' % (
+            epoch, (i + 1) * 100. / n_train, time.time() - tic, tc_cost)
 
         tic = time.time()
         t = 1.0
@@ -196,14 +207,16 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
             for j in xrange(len(sentence) - 1):
                 x = embed_fns[j](x, x0)
                 p = prob_fns[j](x, x0, p, p0)
-            t /= p[0]
+            t /= pow(p[0], 1./len(sentence))
 
-            print '[validating model] t=%2.2f epoch %i >> %2.2f%%' % (t,
-                epoch, (i + 1) * 100. / n_valid)
-            print 'completed in %.2f (sec) <<\r' % (time.time() - tic),
+            print '[validation] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                epoch, (i + 1) * 100. / n_train, time.time() - tic, t),
             sys.stdout.flush()
 
         valid_pp = pow(t, 1./len(S_train))
+        print '[validation] epoch %i >> %2.2f%% completed in %.2f (sec) T cost >> %2.2f <<' % (
+            epoch, (i + 1) * 100. / n_train, time.time() - tic, valid_pp)
+
         # if we got the best validation score until now
         if valid_pp < best_validation_pp:
             print "current best pp at epoch: %d: %2.2f%%" % (epoch, valid_pp)
@@ -218,4 +231,4 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=1000,
 
 
 if __name__ == "__main__":
-    train(n=2, L=10)
+    train(n=10, L=50)

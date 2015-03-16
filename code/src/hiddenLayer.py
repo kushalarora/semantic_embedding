@@ -32,11 +32,6 @@ class HiddenLayer:
         self.P_l_1 = T.dvector(name='P_l_1')
         self.P_1 = T.dvector(name='P_1')
 
-        if self.X_1.ndim != self.X_l_1.ndim or \
-                self.P_1.ndim != self.P_l_1.ndim:
-                    raise TypeError('Layer %i: Both inputs should be of \
-                                    same dimension' % l)
-
         if W_prob is None:
             initial_W_prob = np.asarray(
                 numpy_rng.uniform(
@@ -97,6 +92,16 @@ class HiddenLayer:
 
         return pad_prob(P_le, P_1.shape[0])
 
+    def _get_embeddings(self, X_l_1, X_1):
+        embeddings, updates = theano.scan(
+            lambda x_l_1, x_1:
+                T.tanh(T.dot(self.W_l,
+                             T.concatenate([x_l_1, x_1])) + self.b_l),
+            sequences=[dict(input=X_l_1, taps=[-self.l]),
+                       dict(input=X_1, taps=[self.l])])
+
+        return pad_embedding(embeddings, X_1.shape[0])
+
     def get_prob_fn(self):
         return theano.function(
             inputs=[self.X_l_1, self.X_1, self.P_l_1, self.P_1],
@@ -111,15 +116,6 @@ class HiddenLayer:
             outputs=self._get_embeddings(self.X_l_1,
                                          self.X_1))
 
-    def _get_embeddings(self, X_l_1, X_1):
-        embeddings, updates = theano.scan(
-            lambda x_l_1, x_1:
-                T.tanh(T.dot(self.W_l,
-                             T.concatenate([x_l_1, x_1])) + self.b_l),
-            sequences=[dict(input=X_l_1, taps=[-self.l]),
-                       dict(input=X_1, taps=[self.l])])
-
-        return pad_embedding(embeddings, X_1.shape[0])
 
     def get_composition_training_fn(self):
         """
@@ -142,9 +138,14 @@ class HiddenLayer:
 
         lr = T.dscalar('lr')
 
+        lambda1 = T.dscalar('lambda1')
+
         P_le = self._get_compositional_probability(X_l_1, X_1, P_l_1, P_1)
 
-        L = T.nnet.categorical_crossentropy(P_le[:-self.l], P_l[:-self.l]) + P_le[:-self.l].sum()
+        L = T.nnet.categorical_crossentropy(P_le[:-self.l], P_l[:-self.l]) + \
+            P_le[:-self.l].sum() + \
+            lambda1 * (self.W_prob ** 2).sum()
+
 
         cost = T.mean(L)
 
@@ -155,8 +156,8 @@ class HiddenLayer:
                    for param, gparam in zip(self.comp_params, gparams)]
 
         return theano.function(
-            [w_l_1, w_1, w_l, lr],
-            outputs=cost,
+            [w_l_1, w_1, w_l, lr, lambda1],
+            outputs=(cost, P_le),
             updates=updates)
 
     def get_embedding_train_fn(self):
@@ -182,7 +183,7 @@ class HiddenLayer:
 
         return theano.function(
             [w_l_1, w_1, w_l, lr],
-            outputs=cost,
+            outputs=(cost, X_le),
             updates=updates
             )
 
@@ -203,11 +204,20 @@ def pad_prob(seq, length):
     return T.concatenate([seq, padding], axis=0)
 
 if __name__ == '__main__':
-
+    X = theano.shared(
+        np.random.uniform(
+            high=1,
+            low=-1,
+            size=(6, 2)))
+    P =  theano.shared(
+            np.random.uniform(
+                low=0.01,
+                high=0.1,
+                size=(6,)))
     hl = HiddenLayer(
         np.random.RandomState(3),
-        theano.shared(np.random.normal(size=(6, 2))),
-        theano.shared(np.random.normal(size=(6,))),
+        X,
+        P,
         n=2)
 
     print "W_prob: %s\tb_prob: %s\tW_l: %s\tb_l: %s " % (
@@ -217,21 +227,22 @@ if __name__ == '__main__':
         hl.b_l.get_value())
 
 
-    fe = hl.get_embedding_fn()
-    print fe([[1, 0], [1, 0], [1, 0], [1, 0]],
-             [[1, 0], [1, 0], [1, 0], [1, 0]])
+#    fe = hl.get_embedding_fn()
+#    print fe([[1, 0], [1, 0], [1, 0], [1, 0]],
+#             [[1, 0], [1, 0], [1, 0], [1, 0]])
 
-    fp = hl.get_prob_fn()
-    print fp(np.matrix([[1, 0], [1, 0], [1, 0]]),
-             np.matrix([[1, 0], [1, 0], [1, 0]]),
-             [0.5, 0.5, 0.5],
-             [0.1, 0.1, 0.1])
+#    fp = hl.get_prob_fn()
+#    print fp(np.matrix([[1, 0], [1, 0], [1, 0]]),
+#             np.matrix([[1, 0], [1, 0], [1, 0]]),
+#             [0.5, 0.5, 0.5],
+#             [0.1, 0.1, 0.1])
 
     fpt = hl.get_composition_training_fn()
-    print fpt([1,2,3], [0, 1,2], [2,3,1], 0.1)
-
-    import pdb
-    pdb.set_trace()
-
     fet = hl.get_embedding_train_fn()
-    print fpt([1,2,3], [0, 1,2], [2,3,1], 0.1)
+    for i in xrange(10000):
+         cost, P_le =  fpt([1, 2, 3], [1, 2, 3], [4,5,0], 0.3/(1+i/10000.), 0.5)
+         print "Cost: %f\tP_o: %s\t P_l: %s\r" % (cost, P.get_value()[[4,5, 0]], P_le)
+
+
+         cost, X_le = fet([1,2,3], [0, 1,2], [2,3,0], 0.1)
+         print "Cost: %f\t\r" % (cost )
