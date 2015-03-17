@@ -36,12 +36,16 @@ class HiddenLayer:
 
     def __init__(self,
                  numpy_rng,
+                 X,
+                 P,
                  l=1,
                  n=50,
                  W_prob=None,
                  b_prob=None):
 
         self.l = l
+        self.X = X
+        self.P = P
 
         if W_prob is None:
             initial_W_prob = np.asarray(
@@ -84,10 +88,11 @@ class HiddenLayer:
         self.comp_params = [self.W_prob, self.b_prob]
 
         self.embed_cost = HiddenLayer._get_embedding_cost(l, self.W_l,
-                                                          self.b_l)
+                                                          self.b_l, self.X)
 
         self.comp_cost = HiddenLayer._get_composition_cost(l, self.W_prob,
-                                                           self.b_prob)
+                                                           self.b_prob,
+                                                           self.X, self.P)
 
     def train_fn(self):
         W = T.dmatrix('W')
@@ -126,68 +131,83 @@ class HiddenLayer:
             non_sequences=[W[0]])
 
     @staticmethod
-    def _get_compositional_probability(l, W_prob, b_prob):
+    def _get_comp_probability(l, W_prob, b_prob,
+                              X_l_1, X_1, P_l_1, P_1):
         P_y_x, updates = theano.scan(
 
             lambda x_i, x_i_l:
                 T.nnet.sigmoid(
                     T.dot(T.dot(x_i, W_prob), x_i_l) + b_prob),
 
-            sequences=[dict(input=HiddenLayer.X_l_1, taps=[-l]),
-                       dict(input=HiddenLayer.X_1, taps=[l])])
+            sequences=[dict(input=X_l_1, taps=[-l]),
+                       dict(input=X_1, taps=[l])])
 
         P_le, updates = theano.scan(
 
             lambda p_y_x, p_i, p_i_l: p_y_x * p_i * p_i_l,
 
             sequences=[P_y_x,
-                       dict(input=HiddenLayer.P_l_1, taps=[-l]),
-                       dict(input=HiddenLayer.P_1, taps=[l])])
+                       dict(input=P_l_1, taps=[-l]),
+                       dict(input=P_1, taps=[l])])
 
-        return pad_prob(P_le, HiddenLayer.P_1.shape[0])
+        return pad_prob(P_le, P_1.shape[0])
 
     @staticmethod
-    def _get_embeddings(l, W_l, b_l):
+    def _get_embeddings(l, W_l, b_l, X_l_1, X_1):
         embeddings, updates = theano.scan(
             lambda x_l_1, x_1:
                 T.tanh(T.dot(W_l,
                              T.concatenate([x_l_1, x_1])) + b_l),
-            sequences=[dict(input=HiddenLayer.X_l_1, taps=[-l]),
-                       dict(input=HiddenLayer.X_1, taps=[l])])
+            sequences=[dict(input=X_l_1, taps=[-l]),
+                       dict(input=X_1, taps=[l])])
 
-        return pad_embedding(embeddings, HiddenLayer.X_1.shape[0])
+        return pad_embedding(embeddings, X_1.shape[0])
 
     @staticmethod
     def get_prob_fn(l, W_prob, b_prob):
         return theano.function(
             inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1,
                     HiddenLayer.P_l_1, HiddenLayer.P_1],
-            outputs=HiddenLayer._get_compositional_probability(l, W_prob,
-                                                               b_prob),
+            outputs=HiddenLayer._get_comp_probability(l, W_prob,
+                                                      b_prob,
+                                                      HiddenLayer.X_l_1,
+                                                      HiddenLayer.X_1,
+                                                      HiddenLayer.P_l_1,
+                                                      HiddenLayer.P_1),
             )
 
     @staticmethod
     def get_embedding_fn(l, W_l, b_l):
         return theano.function(
             inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1],
-            outputs=HiddenLayer._get_embeddings(l, W_l, b_l),
-            )
+            outputs=HiddenLayer._get_embeddings(l, W_l, b_l,
+                                                HiddenLayer.X_l_1,
+                                                HiddenLayer.X_1))
 
     @staticmethod
-    def _get_composition_cost(l, W_prob, b_prob):
-        P_le = HiddenLayer._get_compositional_probability(l, W_prob, b_prob)
+    def _get_composition_cost(l, W_prob, b_prob, X, P):
+        X_1 = X[HiddenLayer.w_1]
+        X_l_1 = X[HiddenLayer.w_l_1]
+        P_1 = P[HiddenLayer.w_1]
+        P_l_1 = P[HiddenLayer.w_l_1]
+        P_l = P[HiddenLayer.w_l]
+        P_le = HiddenLayer._get_comp_probability(l, W_prob, b_prob,
+                                                 X_l_1, X_1, P_l_1, P_1)
 
         L = T.nnet.categorical_crossentropy(P_le[:-l],
-                                            HiddenLayer.P_l[:-l]) + \
+                                            P_l[:-l]) + \
             P_le[:-l].sum() + \
             HiddenLayer.lambda1 * (W_prob ** 2).sum()
 
         return T.mean(L)
 
     @staticmethod
-    def _get_embedding_cost(l, W_l, b_l):
-        X_le = HiddenLayer._get_embeddings(l, W_l, b_l)
-        return T.sqrt(T.sum((HiddenLayer.X_l[:-l] - X_le[:-l])**2))
+    def _get_embedding_cost(l, W_l, b_l, X):
+        X_1 = X[HiddenLayer.w_1]
+        X_l_1 = X[HiddenLayer.w_l_1]
+        X_l = X[HiddenLayer.w_l]
+        X_le = HiddenLayer._get_embeddings(l, W_l, b_l, X_l_1, X_1)
+        return T.sqrt(T.sum((X_l[:-l] - X_le[:-l])**2))
 
 
 def pad_embedding(seq, length):
@@ -224,6 +244,8 @@ if __name__ == '__main__':
 
     hl = HiddenLayer(
         np.random.RandomState(3),
+        X,
+        P,
         n=2)
 
     print "W_prob: %s\tb_prob: %s\tW_l: %s\tb_l: %s " % (
@@ -244,26 +266,13 @@ if __name__ == '__main__':
 
     fet = theano.function(
         inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l],
-        outputs=hl.embed_cost,
-        givens={
-            HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
-            HiddenLayer.X_1: X[HiddenLayer.w_1],
-            HiddenLayer.X_l: X[HiddenLayer.w_l]
-            }
-        )
+        outputs=hl.embed_cost)
 
     fpt = theano.function(
         inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l,
                 HiddenLayer.lambda1],
-        outputs=hl.comp_cost,
-        givens={
-            HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
-            HiddenLayer.X_1: X[HiddenLayer.w_1],
-            HiddenLayer.P_l_1: P[HiddenLayer.w_l_1],
-            HiddenLayer.P_1: P[HiddenLayer.w_1],
-            HiddenLayer.P_l: P[HiddenLayer.w_l],
-            }
-        )
+        outputs=hl.comp_cost)
+
     cost = fpt([0, 1, 2],
                [1, 2, 3],
                [3, 4, 5], 0.0)
