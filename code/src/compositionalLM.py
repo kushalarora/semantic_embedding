@@ -1,6 +1,6 @@
 import theano
 import numpy as np
-# import theano.tensor as T
+import theano.tensor as T
 import time
 import sys
 from hiddenLayer import HiddenLayer
@@ -43,27 +43,80 @@ class CompositionalLM:
 
         self.P = P
 
+        self.comp_params = [self.W_prob, self.b_prob]
+
+        self.embed_params = []
+
         self.hidden_layers = []
+
+        self.comp_costs = []
+
+        self.embed_costs = []
         for i in xrange(1, L + 1):
             hidden_layer = HiddenLayer(
                 numpy_rng,
-                self.X,
-                self.P,
                 i,
                 n,
                 self.W_prob,
                 self.b_prob)
 
             self.hidden_layers.append(hidden_layer)
+            self.embed_params.extend(hidden_layer.embed_params)
+            self.comp_costs.append(hidden_layer.comp_cost)
+            self.embed_costs.append(hidden_layer.embed_cost)
+
+    def embed_cost_fn(self, i):
+        cost = self.hidden_layers[i].embed_cost
+        lr = T.dscalar('lr')
+
+        gparams = [T.grad(cost, param)
+                   for param in self.embed_params]
+
+        updates = [(param, param - lr * gparam)
+                   for param, gparam in zip(self.embed_params, gparams)]
+
+        return theano.function(
+            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l, lr],
+            outputs=cost,
+            givens={
+                HiddenLayer.X_l_1: self.X[HiddenLayer.w_l_1],
+                HiddenLayer.X_1: self.X[HiddenLayer.w_1],
+                HiddenLayer.X_l: self.X[HiddenLayer.w_l],
+                },
+            updates=updates
+            )
+
+    def comp_cost_function(self, i):
+        cost = self.hidden_layers[i].comp_cost
+        lr = T.dscalar('lr')
+
+        gparams = [T.grad(cost, param)
+                   for param in self.comp_params]
+
+        updates = [(param, param - lr * gparam)
+                   for param, gparam in zip(self.embed_params, gparams)]
+
+        return theano.function(
+            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l,
+                    HiddenLayer.lambda1, lr],
+            outputs=self.hidden_layers[i].comp_cost,
+            givens={
+                HiddenLayer.X_l_1: self.X[HiddenLayer.w_l_1],
+                HiddenLayer.X_1: self.X[HiddenLayer.w_1],
+                HiddenLayer.P_l_1: self.P[HiddenLayer.w_l_1],
+                HiddenLayer.P_1: self.P[HiddenLayer.w_1],
+                HiddenLayer.P_l: self.P[HiddenLayer.w_l],
+                },
+            updates=updates
+            )
 
     def training_fns(self):
         comp_train_fns = []
         embed_train_fns = []
-
-        for i, layer in enumerate(self.hidden_layers):
+        for i in xrange(len(self.hidden_layers)):
             print ".. Building train model for layer: %i" % i
-            comp_train_fns.append(layer.get_composition_training_fn())
-            embed_train_fns.append(layer.get_embedding_train_fn())
+            comp_train_fns.append(self.comp_cost_function(i))
+            embed_train_fns.append(self.embed_cost_fn(i))
 
         return (comp_train_fns, embed_train_fns)
 
@@ -108,14 +161,13 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
 
     n_valid = len(S_valid)
 
-
     numpy_rng = np.random.RandomState(123)
 
     V_len = len(V)
 
     X_initial = np.asarray(
         numpy_rng.uniform(
-            low=-4 *np.sqrt(6./V_len),
+            low=-4 * np.sqrt(6./V_len),
             high=4 * np.sqrt(6./V_len),
             size=(V_len, n)
         ),
@@ -165,12 +217,18 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
                 e_cost += cost
             te_cost += e_cost
 
-            print '[learning embedding] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                epoch, (i + 1) * 100. / n_train, time.time() - tic, e_cost),
+            print(
+                '[learning embedding] epoch %i >> %2.2f%' % (
+                    epoch, (i + 1) * 100. / n_train) +
+                'completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                    time.time() - tic, e_cost)),
             sys.stdout.flush()
 
-        print '[learning embedding] epoch %i >> %2.2f%% completed in %.2f (sec) T cost >> %2.2f <<\r' % (
-            epoch, (i + 1) * 100. / n_train, time.time() - tic, te_cost)
+        print(
+            '[learning embedding] epoch %i >> %2.2f%' % (
+                epoch, (i + 1) * 100. / n_train) +
+            'completed in %.2f (sec) T cost >> %2.2f <<\r' % (
+                time.time() - tic, te_cost))
         sys.stdout.flush()
 
         tic = time.time()
@@ -185,12 +243,18 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
                 c_cost += np.sqrt(cost)
             tc_cost += c_cost
 
-            print '[learning composition] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                epoch, (i + 1) * 100. / n_train, time.time() - tic, c_cost),
+            print(
+                '[learning composition] epoch %i >> %2.2f%' % (
+                    epoch, (i + 1) * 100. / n_train) +
+                'completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                    time.time() - tic, c_cost)),
             sys.stdout.flush()
 
-        print '[learning composition] epoch %i >> %2.2f%% completed in %.2f (sec) T cost >> %2.2f <<' % (
-            epoch, (i + 1) * 100. / n_train, time.time() - tic, tc_cost)
+        print(
+            '[learning composition] epoch %i >> %2.2f%' % (
+                epoch, (i + 1) * 100. / n_train) +
+            'completed in %.2f (sec) T cost >> %2.2f <<' % (
+                time.time() - tic, tc_cost))
 
         tic = time.time()
         t = 1.0
@@ -208,13 +272,19 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
                 p = prob_fns[j](x, x0, p, p0)
             t /= pow(p[0], 1./len(sentence))
 
-            print '[validation] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                epoch, (i + 1) * 100. / n_train, time.time() - tic, t),
+            print(
+                '[validation] epoch %i >> %2.2f%' % (
+                    epoch, (i + 1) * 100. / n_train) +
+                'completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                    time.time() - tic, t)),
             sys.stdout.flush()
 
         valid_pp = pow(t, 1./n_valid)
-        print '[validation] epoch %i >> %2.2f%% completed in %.2f (sec) T cost >> %2.2f <<' % (
-            epoch, (i + 1) * 100. / n_train, time.time() - tic, valid_pp)
+        print(
+            '[validation] epoch %i >> %2.2f%' % (
+                epoch, (i + 1) * 100. / n_train) +
+            'completed in %.2f (sec) T cost >> %2.2f <<' % (
+                time.time() - tic, valid_pp))
 
         # if we got the best validation score until now
         if valid_pp < best_validation_pp:

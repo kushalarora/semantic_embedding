@@ -13,24 +13,35 @@ class HiddenLayer:
         In second stage, the Compose stage, we learn the compositional operator
         by minimizing reconstruction error between the embedding learning
         in previous step and through composition."""
+
+    X_l_1 = T.dmatrix(name='X_l_1')
+    X_1 = T.dmatrix(name='X_1')
+    X_l = T.dmatrix(name='X_l')
+
+    P_l_1 = T.dvector(name='P_l_1')
+    P_1 = T.dvector(name='P_1')
+    P_l = T.dvector(name='P_l')
+
+    w_l_1 = T.ivector(name='w_l_1')
+    w_l = T.ivector(name='w_l')
+    w_1 = T.ivector(name='w_1')
+
+    W_l = T.dmatrix('W_l')
+    b_l = T.dvector('b_l')
+
+    W_prob = T.dmatrix('W_prob')
+    b_prob = T.dscalar('b_prob')
+
+    lambda1 = T.dscalar('lambda1')
+
     def __init__(self,
                  numpy_rng,
-                 X,
-                 P,
                  l=1,
                  n=50,
                  W_prob=None,
                  b_prob=None):
 
         self.l = l
-        self.X = X
-        self.P = P
-
-        self.X_l_1 = T.dmatrix(name='X_l_1')
-        self.X_1 = T.dmatrix(name='X_1')
-
-        self.P_l_1 = T.dvector(name='P_l_1')
-        self.P_1 = T.dvector(name='P_1')
 
         if W_prob is None:
             initial_W_prob = np.asarray(
@@ -70,122 +81,113 @@ class HiddenLayer:
 
         self.embed_params = [self.W_l, self.b_l]
 
-        self.comp_params = [self.W_prob, self.b_prob, self.X]
+        self.comp_params = [self.W_prob, self.b_prob]
 
-    def _get_compositional_probability(self, X_l_1, X_1, P_l_1, P_1):
+        self.embed_cost = HiddenLayer._get_embedding_cost(l, self.W_l,
+                                                          self.b_l)
+
+        self.comp_cost = HiddenLayer._get_composition_cost(l, self.W_prob,
+                                                           self.b_prob)
+
+    def train_fn(self):
+        W = T.dmatrix('W')
+
+        fpt = theano.function(
+            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l,
+                    HiddenLayer.lambda1],
+            outputs=hl.comp_cost,
+            givens={
+                HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
+                HiddenLayer.X_1: X[HiddenLayer.w_1],
+                HiddenLayer.P_l_1: P[HiddenLayer.w_l_1],
+                HiddenLayer.P_1: P[HiddenLayer.w_1],
+                HiddenLayer.P_l: P[HiddenLayer.w_l],
+                }
+            )
+
+        fet = theano.function(
+            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l],
+            outputs=hl.embed_cost,
+            givens={
+                HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
+                HiddenLayer.X_1: X[HiddenLayer.w_1],
+                HiddenLayer.X_l: X[HiddenLayer.w_l]
+                }
+            )
+
+        comp_costs, _ = theano.scan(
+            lambda w_l_1, w_l, w_1: fpt(w_l_1, w_1, w_l),
+            sequences=[dict(inputs=W, taps=[-1, 0])],
+            non_sequences=[W[0]])
+
+        embed_costs, _ = theano.scan(
+            lambda w_l_1, w_l, w_1: fet(w_l_1, w_1, w_l),
+            sequences=[dict(inputs=W, taps=[-1, 0])],
+            non_sequences=[W[0]])
+
+    @staticmethod
+    def _get_compositional_probability(l, W_prob, b_prob):
         P_y_x, updates = theano.scan(
 
             lambda x_i, x_i_l:
                 T.nnet.sigmoid(
-                    T.dot(T.dot(x_i, self.W_prob), x_i_l) +
-                    self.b_prob),
+                    T.dot(T.dot(x_i, W_prob), x_i_l) + b_prob),
 
-            sequences=[dict(input=X_l_1, taps=[-self.l]),
-                       dict(input=X_1, taps=[self.l])])
+            sequences=[dict(input=HiddenLayer.X_l_1, taps=[-l]),
+                       dict(input=HiddenLayer.X_1, taps=[l])])
 
         P_le, updates = theano.scan(
 
             lambda p_y_x, p_i, p_i_l: p_y_x * p_i * p_i_l,
 
-            sequences=[P_y_x, dict(input=P_l_1, taps=[-self.l]),
-                       dict(input=P_1, taps=[self.l])])
+            sequences=[P_y_x,
+                       dict(input=HiddenLayer.P_l_1, taps=[-l]),
+                       dict(input=HiddenLayer.P_1, taps=[l])])
 
-        return pad_prob(P_le, P_1.shape[0])
+        return pad_prob(P_le, HiddenLayer.P_1.shape[0])
 
-    def _get_embeddings(self, X_l_1, X_1):
+    @staticmethod
+    def _get_embeddings(l, W_l, b_l):
         embeddings, updates = theano.scan(
             lambda x_l_1, x_1:
-                T.tanh(T.dot(self.W_l,
-                             T.concatenate([x_l_1, x_1])) + self.b_l),
-            sequences=[dict(input=X_l_1, taps=[-self.l]),
-                       dict(input=X_1, taps=[self.l])])
+                T.tanh(T.dot(W_l,
+                             T.concatenate([x_l_1, x_1])) + b_l),
+            sequences=[dict(input=HiddenLayer.X_l_1, taps=[-l]),
+                       dict(input=HiddenLayer.X_1, taps=[l])])
 
-        return pad_embedding(embeddings, X_1.shape[0])
+        return pad_embedding(embeddings, HiddenLayer.X_1.shape[0])
 
-    def get_prob_fn(self):
+    @staticmethod
+    def get_prob_fn(l, W_prob, b_prob):
         return theano.function(
-            inputs=[self.X_l_1, self.X_1, self.P_l_1, self.P_1],
-            outputs=self._get_compositional_probability(self.X_l_1,
-                                                        self.X_1,
-                                                        self.P_l_1,
-                                                        self.P_1))
-
-    def get_embedding_fn(self):
-        return theano.function(
-            inputs=[self.X_l_1, self.X_1],
-            outputs=self._get_embeddings(self.X_l_1,
-                                         self.X_1))
-
-
-    def get_composition_training_fn(self):
-        """
-            w_l_1: TensorVariable :: phrases of length l-1
-            w_1: TensorVariable :: words of length 1
-            w_l: TensorVariable :: phrases of length l
-
-        """
-
-        w_l_1 = T.lvector('w_l_1')
-        w_1 = T.lvector('w_1')
-        w_l = T.lvector('w_l')
-
-        X_l_1 = self.X[w_l_1]
-        X_1 = self.X[w_1]
-        P_l_1 = self.P[w_l_1]
-        P_1 = self.P[w_1]
-
-        P_l = self.P[w_l]
-
-        lr = T.dscalar('lr')
-
-        lambda1 = T.dscalar('lambda1')
-
-        P_le = self._get_compositional_probability(X_l_1, X_1, P_l_1, P_1)
-
-        L = T.nnet.categorical_crossentropy(P_le[:-self.l], P_l[:-self.l]) + \
-            P_le[:-self.l].sum() + \
-            lambda1 * (self.W_prob ** 2).sum()
-
-
-        cost = T.mean(L)
-
-        gparams = [T.grad(cost, param)
-                   for param in self.comp_params]
-
-        updates = [(param, param - gparam * lr)
-                   for param, gparam in zip(self.comp_params, gparams)]
-
-        return theano.function(
-            [w_l_1, w_1, w_l, lr, lambda1],
-            outputs=(cost, P_le),
-            updates=updates)
-
-    def get_embedding_train_fn(self):
-
-        w_l_1 = T.lvector('w_l_1')
-        w_1 = T.lvector('w_1')
-        w_l = T.lvector('w_l')
-
-        X_l_1 = self.X[w_l_1]
-        X_1 = self.X[w_1]
-        X_l = self.X[w_l]
-        X_le = self._get_embeddings(X_l_1, X_1)
-
-        lr = T.dscalar('lr')
-
-        cost = T.sum(T.sqr(X_l[:-self.l] - X_le[:-self.l]))
-
-        gparams = [T.grad(cost, param)
-                   for param in self.embed_params]
-
-        updates = [(param, param - gparam * lr)
-                   for param, gparam in zip(self.embed_params, gparams)]
-
-        return theano.function(
-            [w_l_1, w_1, w_l, lr],
-            outputs=(cost, X_le),
-            updates=updates
+            inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1,
+                    HiddenLayer.P_l_1, HiddenLayer.P_1],
+            outputs=HiddenLayer._get_compositional_probability(l, W_prob,
+                                                               b_prob),
             )
+
+    @staticmethod
+    def get_embedding_fn(l, W_l, b_l):
+        return theano.function(
+            inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1],
+            outputs=HiddenLayer._get_embeddings(l, W_l, b_l),
+            )
+
+    @staticmethod
+    def _get_composition_cost(l, W_prob, b_prob):
+        P_le = HiddenLayer._get_compositional_probability(l, W_prob, b_prob)
+
+        L = T.nnet.categorical_crossentropy(P_le[:-l],
+                                            HiddenLayer.P_l[:-l]) + \
+            P_le[:-l].sum() + \
+            HiddenLayer.lambda1 * (W_prob ** 2).sum()
+
+        return T.mean(L)
+
+    @staticmethod
+    def _get_embedding_cost(l, W_l, b_l):
+        X_le = HiddenLayer._get_embeddings(l, W_l, b_l)
+        return T.sqrt(T.sum((HiddenLayer.X_l[:-l] - X_le[:-l])**2))
 
 
 def pad_embedding(seq, length):
@@ -205,19 +207,23 @@ def pad_prob(seq, length):
 
 if __name__ == '__main__':
     X = theano.shared(
-        np.random.uniform(
-            high=1,
-            low=-1,
-            size=(6, 2)))
-    P =  theano.shared(
+        np.asarray(
+            np.random.uniform(
+                high=1,
+                low=-1,
+                size=(6, 2))),
+        borrow=True)
+
+    P = theano.shared(
+        np.asarray(
             np.random.uniform(
                 low=0.01,
                 high=0.1,
-                size=(6,)))
+                size=(6,))),
+        borrow=True)
+
     hl = HiddenLayer(
         np.random.RandomState(3),
-        X,
-        P,
         n=2)
 
     print "W_prob: %s\tb_prob: %s\tW_l: %s\tb_l: %s " % (
@@ -226,23 +232,40 @@ if __name__ == '__main__':
         hl.W_l.get_value(),
         hl.b_l.get_value())
 
+    fe = HiddenLayer.get_embedding_fn(1, hl.W_l, hl.b_l)
+    print fe([[1, 0], [1, 0], [1, 0]],
+             [[1, 0], [1, 0], [1, 0]])
 
-#    fe = hl.get_embedding_fn()
-#    print fe([[1, 0], [1, 0], [1, 0], [1, 0]],
-#             [[1, 0], [1, 0], [1, 0], [1, 0]])
+    fp = HiddenLayer.get_prob_fn(1, hl.W_prob, hl.b_prob)
+    print fp(np.matrix([[1, 0], [1, 0], [1, 0]]),
+             np.matrix([[1, 0], [1, 0], [1, 0]]),
+             [0.5, 0.5, 0.5],
+             [0.1, 0.1, 0.1])
 
-#    fp = hl.get_prob_fn()
-#    print fp(np.matrix([[1, 0], [1, 0], [1, 0]]),
-#             np.matrix([[1, 0], [1, 0], [1, 0]]),
-#             [0.5, 0.5, 0.5],
-#             [0.1, 0.1, 0.1])
+    fet = theano.function(
+        inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l],
+        outputs=hl.embed_cost,
+        givens={
+            HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
+            HiddenLayer.X_1: X[HiddenLayer.w_1],
+            HiddenLayer.X_l: X[HiddenLayer.w_l]
+            }
+        )
 
-    fpt = hl.get_composition_training_fn()
-    fet = hl.get_embedding_train_fn()
-    for i in xrange(10000):
-         cost, P_le =  fpt([1, 2, 3], [1, 2, 3], [4,5,0], 0.3/(1+i/10000.), 0.5)
-         print "Cost: %f\tP_o: %s\t P_l: %s\r" % (cost, P.get_value()[[4,5, 0]], P_le)
+    fpt = theano.function(
+        inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l,
+                HiddenLayer.lambda1],
+        outputs=hl.comp_cost,
+        givens={
+            HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
+            HiddenLayer.X_1: X[HiddenLayer.w_1],
+            HiddenLayer.P_l_1: P[HiddenLayer.w_l_1],
+            HiddenLayer.P_1: P[HiddenLayer.w_1],
+            HiddenLayer.P_l: P[HiddenLayer.w_l],
+            }
+        )
+    cost = fpt([0, 1, 2],
+               [1, 2, 3],
+               [3, 4, 5], 0.0)
 
-
-         cost, X_le = fet([1,2,3], [0, 1,2], [2,3,0], 0.1)
-         print "Cost: %f\t\r" % (cost )
+    print "Cost: %s\t\r" % (cost)
