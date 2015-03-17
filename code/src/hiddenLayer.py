@@ -116,7 +116,6 @@ class HiddenLayer:
             outputs=self._get_embeddings(self.X_l_1,
                                          self.X_1))
 
-
     def get_composition_training_fn(self):
         """
             w_l_1: TensorVariable :: phrases of length l-1
@@ -145,7 +144,6 @@ class HiddenLayer:
         L = T.nnet.categorical_crossentropy(P_le[:-self.l], P_l[:-self.l]) + \
             P_le[:-self.l].sum() + \
             lambda1 * (self.W_prob ** 2).sum()
-
 
         cost = T.mean(L)
 
@@ -209,11 +207,11 @@ if __name__ == '__main__':
             high=1,
             low=-1,
             size=(6, 2)))
-    P =  theano.shared(
-            np.random.uniform(
-                low=0.01,
-                high=0.1,
-                size=(6,)))
+    P = theano.shared(
+        np.random.uniform(
+            low=0.01,
+            high=0.1,
+            size=(6,)))
     hl = HiddenLayer(
         np.random.RandomState(3),
         X,
@@ -240,9 +238,13 @@ if __name__ == '__main__':
     fpt = hl.get_composition_training_fn()
     fet = hl.get_embedding_train_fn()
     for i in xrange(10000):
-         cost, P_le =  fpt([1, 2, 3], [1, 2, 3], [4,5,0], 0.3/(1+i/10000.), 0.5)
-         print "Cost: %f\tP_o: %s\t P_l: %s\r" % (cost, P.get_value()[[4,5, 0]], P_le)
+        cost, P_le = fpt([1, 2, 3],
+                         [1, 2, 3],
+                         [4, 5, 0],
+                         0.3/(1+i/10000.), 0.5)
+        print "Cost: %f\tP_o: %s\t P_l: %s\r" % (cost,
+                                                 P.get_value()[[4, 5, 0]],
+                                                 P_le)
 
-
-         cost, X_le = fet([1,2,3], [0, 1,2], [2,3,0], 0.1)
-         print "Cost: %f\t\r" % (cost )
+        cost, X_le = fet([1, 2, 3], [0, 1, 2], [2, 3, 0], 0.1)
+        print "Cost: %f\t\r" % (cost)
