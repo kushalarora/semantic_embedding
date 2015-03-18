@@ -22,113 +22,11 @@ class HiddenLayer:
     P_1 = T.dvector(name='P_1')
     P_l = T.dvector(name='P_l')
 
-    w_l_1 = T.ivector(name='w_l_1')
-    w_l = T.ivector(name='w_l')
-    w_1 = T.ivector(name='w_1')
-
-    W_l = T.dmatrix('W_l')
-    b_l = T.dvector('b_l')
-
-    W_prob = T.dmatrix('W_prob')
-    b_prob = T.dscalar('b_prob')
+    W = T.lmatrix('W')
 
     lambda1 = T.dscalar('lambda1')
 
-    def __init__(self,
-                 numpy_rng,
-                 X,
-                 P,
-                 l=1,
-                 n=50,
-                 W_prob=None,
-                 b_prob=None):
-
-        self.l = l
-        self.X = X
-        self.P = P
-
-        if W_prob is None:
-            initial_W_prob = np.asarray(
-                numpy_rng.uniform(
-                    low=-4 * np.sqrt(3/n),
-                    high=4 * np.sqrt(3/n),
-                    size=(n, n)),
-                dtype=theano.config.floatX)
-
-            W_prob = theano.shared(
-                value=initial_W_prob,
-                name='W_prob',
-                borrow=True)
-
-        if b_prob is None:
-            b_prob = theano.shared(
-                value=0.0,
-                name='b_prob')
-
-        self.W_prob = W_prob
-
-        self.b_prob = b_prob
-
-        self.b_l = theano.shared(
-            value=np.zeros((n,), dtype=theano.config.floatX),
-            name='b_l',
-            borrow=True)
-
-        W_l_initial = np.asarray(
-            numpy_rng.uniform(
-                low=-4*np.sqrt(3/n),
-                high=4*np.sqrt(3/n),
-                size=(n, 2*n)),
-            dtype=theano.config.floatX)
-
-        self.W_l = theano.shared(value=W_l_initial, name='W_l', borrow=True)
-
-        self.embed_params = [self.W_l, self.b_l]
-
-        self.comp_params = [self.W_prob, self.b_prob]
-
-        self.embed_cost = HiddenLayer._get_embedding_cost(l, self.W_l,
-                                                          self.b_l, self.X)
-
-        self.comp_cost = HiddenLayer._get_composition_cost(l, self.W_prob,
-                                                           self.b_prob,
-                                                           self.X, self.P)
-
-    def train_fn(self):
-        W = T.dmatrix('W')
-
-        fpt = theano.function(
-            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l,
-                    HiddenLayer.lambda1],
-            outputs=hl.comp_cost,
-            givens={
-                HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
-                HiddenLayer.X_1: X[HiddenLayer.w_1],
-                HiddenLayer.P_l_1: P[HiddenLayer.w_l_1],
-                HiddenLayer.P_1: P[HiddenLayer.w_1],
-                HiddenLayer.P_l: P[HiddenLayer.w_l],
-                }
-            )
-
-        fet = theano.function(
-            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l],
-            outputs=hl.embed_cost,
-            givens={
-                HiddenLayer.X_l_1: X[HiddenLayer.w_l_1],
-                HiddenLayer.X_1: X[HiddenLayer.w_1],
-                HiddenLayer.X_l: X[HiddenLayer.w_l]
-                }
-            )
-
-        comp_costs, _ = theano.scan(
-            lambda w_l_1, w_l, w_1: fpt(w_l_1, w_1, w_l),
-            sequences=[dict(inputs=W, taps=[-1, 0])],
-            non_sequences=[W[0]])
-
-        embed_costs, _ = theano.scan(
-            lambda w_l_1, w_l, w_1: fet(w_l_1, w_1, w_l),
-            sequences=[dict(inputs=W, taps=[-1, 0])],
-            non_sequences=[W[0]])
+    lr = T.dscalar('lr')
 
     @staticmethod
     def _get_comp_probability(l, W_prob, b_prob,
@@ -186,11 +84,11 @@ class HiddenLayer:
 
     @staticmethod
     def _get_composition_cost(l, W_prob, b_prob, X, P):
-        X_1 = X[HiddenLayer.w_1]
-        X_l_1 = X[HiddenLayer.w_l_1]
-        P_1 = P[HiddenLayer.w_1]
-        P_l_1 = P[HiddenLayer.w_l_1]
-        P_l = P[HiddenLayer.w_l]
+        X_1 = X[HiddenLayer.W[0]]
+        X_l_1 = X[HiddenLayer.W[l-1]]
+        P_1 = P[HiddenLayer.W[0]]
+        P_l_1 = P[HiddenLayer.W[l-1]]
+        P_l = P[HiddenLayer.W[l]]
         P_le = HiddenLayer._get_comp_probability(l, W_prob, b_prob,
                                                  X_l_1, X_1, P_l_1, P_1)
 
@@ -203,11 +101,145 @@ class HiddenLayer:
 
     @staticmethod
     def _get_embedding_cost(l, W_l, b_l, X):
-        X_1 = X[HiddenLayer.w_1]
-        X_l_1 = X[HiddenLayer.w_l_1]
-        X_l = X[HiddenLayer.w_l]
+        X_1 = X[HiddenLayer.W[0]]
+        X_l_1 = X[HiddenLayer.W[l-1]]
+        X_l = X[HiddenLayer.W[l]]
         X_le = HiddenLayer._get_embeddings(l, W_l, b_l, X_l_1, X_1)
         return T.sqrt(T.sum((X_l[:-l] - X_le[:-l])**2))
+
+    def __init__(self,
+                 numpy_rng,
+                 X,
+                 P,
+                 composite_embed_cost=None,
+                 composite_comp_cost=None,
+                 composite_embed_params=[],
+                 composite_comp_params=[],
+                 l=1,
+                 n=50,
+                 W_prob=None,
+                 b_prob=None):
+
+        self.l = l
+        self.X = X
+        self.P = P
+
+        self.composite_comp_params = composite_comp_params
+        self.composite_embed_params = composite_embed_params
+
+        if W_prob is None:
+            initial_W_prob = np.asarray(
+                numpy_rng.uniform(
+                    low=-4 * np.sqrt(3/n),
+                    high=4 * np.sqrt(3/n),
+                    size=(n, n)),
+                dtype=theano.config.floatX)
+
+            W_prob = theano.shared(
+                value=initial_W_prob,
+                name='W_prob',
+                borrow=True)
+
+            self.composite_comp_params.append(W_prob)
+
+        if b_prob is None:
+            b_prob = theano.shared(
+                value=0.0,
+                name='b_prob')
+
+            self.composite_comp_params.append(b_prob)
+
+        self.W_prob = W_prob
+
+        self.b_prob = b_prob
+
+        self.b_l = theano.shared(
+            value=np.zeros((n,), dtype=theano.config.floatX),
+            name='b_l',
+            borrow=True)
+
+        W_l_initial = np.asarray(
+            numpy_rng.uniform(
+                low=-4*np.sqrt(3/n),
+                high=4*np.sqrt(3/n),
+                size=(n, 2*n)),
+            dtype=theano.config.floatX)
+
+        self.W_l = theano.shared(value=W_l_initial, name='W_l', borrow=True)
+
+        self.composite_embed_params.extend([self.W_l, self.b_l])
+
+        self.comp_params = [self.W_prob, self.b_prob]
+
+        self.embed_params = [self.W_l, self.b_l]
+
+        self.embed_cost = HiddenLayer._get_embedding_cost(l, self.W_l,
+                                                          self.b_l, self.X)
+
+        self.comp_cost = HiddenLayer._get_composition_cost(l, self.W_prob,
+                                                           self.b_prob,
+                                                           self.X, self.P)
+
+        self.composite_embed_cost = self.embed_cost
+
+        if composite_embed_cost is not None:
+            self.composite_embed_cost += composite_embed_cost
+
+        self.composite_comp_cost = self.comp_cost
+
+        if composite_comp_cost is not None:
+            self.composite_comp_cost += composite_comp_cost
+
+    def composite_train_fns(self):
+
+        g_comp_params = [T.grad(self.composite_comp_cost, param)
+                         for param in self.composite_comp_params]
+
+        g_embed_params = [T.grad(self.composite_embed_cost, param)
+                          for param in self.composite_embed_params]
+
+        comp_updates = [(param, param - HiddenLayer.lr * gparam)
+                        for param, gparam in zip(self.composite_comp_params,
+                                                 g_comp_params)]
+
+        embed_updates = [(param, param - HiddenLayer.lr * gparam)
+                         for param, gparam in zip(self.composite_embed_params,
+                                                  g_embed_params)]
+
+        embed_train_fn = theano.function([HiddenLayer.W],
+                                         outputs=self.composite_embed_cost,
+                                         updates=embed_updates)
+
+        comp_train_fn = theano.function([HiddenLayer.W],
+                                        outputs=self.composite_comp_cost,
+                                        updates=comp_updates)
+        return (comp_train_fn, embed_train_fn)
+
+    def train_fns(self):
+
+        g_comp_params = [T.grad(self.comp_cost, param)
+                         for param in self.comp_params]
+
+        g_embed_params = [T.grad(self.embed_cost, param)
+                          for param in self.embed_params]
+
+        comp_updates = [(param, param - HiddenLayer.lr * gparam)
+                        for param, gparam in zip(self.comp_params,
+                                                 g_comp_params)]
+
+        embed_updates = [(param, param - HiddenLayer.lr * gparam)
+                         for param, gparam in zip(self.embed_params,
+                                                  g_embed_params)]
+
+        embed_train_fn = theano.function([HiddenLayer.W, HiddenLayer.lr],
+                                         outputs=self.embed_cost,
+                                         updates=embed_updates)
+
+        comp_train_fn = theano.function([HiddenLayer.W, HiddenLayer.lambda1,
+                                         HiddenLayer.lr],
+                                        outputs=self.comp_cost,
+                                        updates=comp_updates)
+        return (comp_train_fn, embed_train_fn)
 
 
 def pad_embedding(seq, length):
@@ -264,17 +296,16 @@ if __name__ == '__main__':
              [0.5, 0.5, 0.5],
              [0.1, 0.1, 0.1])
 
-    fet = theano.function(
-        inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l],
-        outputs=hl.embed_cost)
+    fpt, fet = hl.train_fns()
 
-    fpt = theano.function(
-        inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l,
-                HiddenLayer.lambda1],
-        outputs=hl.comp_cost)
+    comp_cost = fpt([[0, 1, 2],
+                     [1, 2, 3],
+                     [3, 4, 5]],
+                    0.0, 0.1)
 
-    cost = fpt([0, 1, 2],
-               [1, 2, 3],
-               [3, 4, 5], 0.0)
+    embed_cost = fet([[0, 1, 2],
+                      [1, 2, 3],
+                      [3, 4, 5]],
+                     0.1)
 
-    print "Cost: %s\t\r" % (cost)
+    print "Comp Cost: %s\t Embed Cost: %s\r" % (comp_cost, embed_cost)
