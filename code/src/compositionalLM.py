@@ -43,82 +43,52 @@ class CompositionalLM:
 
         self.P = P
 
-        self.comp_params = [self.W_prob, self.b_prob]
+        self.n = n
 
-        self.embed_params = []
+        self.L = L
+
+        self.comp_params = [self.W_prob, self.b_prob]
 
         self.hidden_layers = []
 
-        self.comp_costs = []
+        composite_comp_cost = None
 
-        self.embed_costs = []
+        composite_embed_cost = None
+
+        composite_comp_params = [self.W_prob, self.b_prob, self.X]
+
+        composite_embed_params = []
+
         for i in xrange(1, L + 1):
             hidden_layer = HiddenLayer(
                 numpy_rng,
+                self.X,
+                self.P,
+                composite_embed_cost,
+                composite_comp_cost,
+                composite_embed_params,
+                composite_comp_params,
                 i,
                 n,
                 self.W_prob,
                 self.b_prob)
 
             self.hidden_layers.append(hidden_layer)
-            self.embed_params.extend(hidden_layer.embed_params)
-            self.comp_costs.append(hidden_layer.comp_cost)
-            self.embed_costs.append(hidden_layer.embed_cost)
 
-    def embed_cost_fn(self, i):
-        cost = self.hidden_layers[i].embed_cost
-        lr = T.dscalar('lr')
+            composite_comp_cost = hidden_layer.composite_comp_cost
 
-        gparams = [T.grad(cost, param)
-                   for param in self.embed_params]
+            composite_embed_cost = hidden_layer.composite_embed_cost
 
-        updates = [(param, param - lr * gparam)
-                   for param, gparam in zip(self.embed_params, gparams)]
+            composite_embed_params = hidden_layer.composite_embed_params
 
-        return theano.function(
-            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l, lr],
-            outputs=cost,
-            givens={
-                HiddenLayer.X_l_1: self.X[HiddenLayer.w_l_1],
-                HiddenLayer.X_1: self.X[HiddenLayer.w_1],
-                HiddenLayer.X_l: self.X[HiddenLayer.w_l],
-                },
-            updates=updates
-            )
-
-    def comp_cost_function(self, i):
-        cost = self.hidden_layers[i].comp_cost
-        lr = T.dscalar('lr')
-
-        gparams = [T.grad(cost, param)
-                   for param in self.comp_params]
-
-        updates = [(param, param - lr * gparam)
-                   for param, gparam in zip(self.embed_params, gparams)]
-
-        return theano.function(
-            inputs=[HiddenLayer.w_l_1, HiddenLayer.w_1, HiddenLayer.w_l,
-                    HiddenLayer.lambda1, lr],
-            outputs=self.hidden_layers[i].comp_cost,
-            givens={
-                HiddenLayer.X_l_1: self.X[HiddenLayer.w_l_1],
-                HiddenLayer.X_1: self.X[HiddenLayer.w_1],
-                HiddenLayer.P_l_1: self.P[HiddenLayer.w_l_1],
-                HiddenLayer.P_1: self.P[HiddenLayer.w_1],
-                HiddenLayer.P_l: self.P[HiddenLayer.w_l],
-                },
-            updates=updates
-            )
+            composite_comp_params = hidden_layer.composite_comp_params
 
     def training_fns(self):
-        comp_train_fns = []
-        embed_train_fns = []
-        for i in xrange(len(self.hidden_layers)):
-            print ".. Building train model for layer: %i" % i
-            comp_train_fns.append(self.comp_cost_function(i))
-            embed_train_fns.append(self.embed_cost_fn(i))
-
-        return (comp_train_fns, embed_train_fns)
+        fns = []
+        import pdb;pdb.set_trace()
+        for i in xrange(self.L):
+            print ".. building training fn of layer %i" % i
+            fns.append(self.hidden_layers[i].composite_train_fns())
 
     def prob_embedding_fn(self):
         prob_fns = []
@@ -182,13 +152,17 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
         value=P,
         name='P',
         borrow=True)
+    tic = time.time()
+    print ".. Building Model"
 
     cLM = CompositionalLM(
         numpy_rng, X, P, n, L)
 
-    e_fns, c_fns = cLM.training_fns()
+    print "Building Model Completed in %2.2f secs" % (time.time() - tic)
+    fns = cLM.training_fns()
 
     prob_fns, embed_fns = cLM.prob_embedding_fn()
+
 
     ###############
     # TRAIN MODEL #
@@ -206,55 +180,56 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
 
         np.random.shuffle(S_train)
         te_cost = 0.0
+        tc_cost = 0.0
         for i, sentence in enumerate(S_train):
-            e_cost = 0.0
-            for j in xrange(len(sentence) - 1):
-                cost, _ = e_fns[j](sentence[j],
-                                   sentence[0],
-                                   sentence[j+1],
-                                   learning_rate,
-                                   0.2)
-                e_cost += cost
-            te_cost += e_cost
+            s_len = len(sentence)
+            if s_len == 1:
+                continue
 
+            comp_train_fn, embed_train_fn = fns[len(sentence) - 2]
+            c_cost, e_cost = (comp_train_fn(sentence, 0.2, learning_rate),
+                              embed_train_fn(sentence, learning_rate))
             print(
                 '[learning embedding] epoch %i >> %2.2f%' % (
                     epoch, (i + 1) * 100. / n_train) +
-                'completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                    time.time() - tic, e_cost)),
+                'completed in %.2f (sec) costs >> (%2.2f, %2.2f) <<\r' % (
+                    time.time() - tic, c_cost, e_cost)),
             sys.stdout.flush()
+
+            te_cost += e_cost
+            tc_cost += c_cost
 
         print(
             '[learning embedding] epoch %i >> %2.2f%' % (
                 epoch, (i + 1) * 100. / n_train) +
-            'completed in %.2f (sec) T cost >> %2.2f <<\r' % (
-                time.time() - tic, te_cost))
+            'completed in %.2f (sec) T cost >> (%2.2f, %2.2f)<<\r' % (
+                time.time() - tic, tc_cost, tc_cost, te_cost))
         sys.stdout.flush()
 
-        tic = time.time()
-        tc_cost = 0.0
-        for i, sentence in enumerate(S_train):
-            c_cost = 0.0
-            for j in xrange(len(sentence) - 1):
-                cost, _ = c_fns[j](sentence[j],
-                                   sentence[0],
-                                   sentence[j+1],
-                                   learning_rate)
-                c_cost += np.sqrt(cost)
-            tc_cost += c_cost
+        #tic = time.time()
+        #tc_cost = 0.0
+        #for i, sentence in enumerate(S_train):
+        #    c_cost = 0.0
+        #    for j in xrange(len(sentence) - 1):
+        #        cost, _ = c_fns[j](sentence[j],
+        #                           sentence[0],
+        #                           sentence[j+1],
+        #                           learning_rate)
+        #        c_cost += np.sqrt(cost)
+        #    tc_cost += c_cost
 
-            print(
-                '[learning composition] epoch %i >> %2.2f%' % (
-                    epoch, (i + 1) * 100. / n_train) +
-                'completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                    time.time() - tic, c_cost)),
-            sys.stdout.flush()
+        #    print(
+        #        '[learning composition] epoch %i >> %2.2f%' % (
+        #            epoch, (i + 1) * 100. / n_train) +
+        #        'completed in %.2f (sec) cost >> %2.2f <<\r' % (
+        #            time.time() - tic, c_cost)),
+        #    sys.stdout.flush()
 
-        print(
-            '[learning composition] epoch %i >> %2.2f%' % (
-                epoch, (i + 1) * 100. / n_train) +
-            'completed in %.2f (sec) T cost >> %2.2f <<' % (
-                time.time() - tic, tc_cost))
+        #print(
+        #    '[learning composition] epoch %i >> %2.2f%' % (
+        #        epoch, (i + 1) * 100. / n_train) +
+        #    'completed in %.2f (sec) T cost >> %2.2f <<' % (
+        #        time.time() - tic, tc_cost))
 
         tic = time.time()
         t = 1.0
