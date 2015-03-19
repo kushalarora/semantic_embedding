@@ -103,7 +103,7 @@ class CompositionalLM:
 
 
 def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
-          dataset_train='../data/train1', dataset_valid='../data/valid1',
+          dataset_train='../data/train2', dataset_valid='../data/valid2',
           batch_size=600):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear
@@ -159,6 +159,7 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
         numpy_rng, X, P, n, L)
 
     print "Building Model Completed in %2.2f secs" % (time.time() - tic)
+    import pdb;pdb.set_trace()
     fns = cLM.training_fns()
 
     prob_fns, embed_fns = cLM.prob_embedding_fn()
@@ -269,4 +270,4 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
 
 
 if __name__ == "__main__":
-    train(n=10, L=10)
+    train(n=10, L=5)
