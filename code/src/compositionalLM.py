@@ -85,19 +85,19 @@ class CompositionalLM:
 
     def training_fns(self):
         fns = []
-        import pdb;pdb.set_trace()
         for i in xrange(self.L):
-            print ".. building training fn of layer %i" % i
+            print ".. building training fn of layer %d" % i
             fns.append(self.hidden_layers[i].composite_train_fns())
+        return fns
 
     def prob_embedding_fn(self):
         prob_fns = []
         embed_fns = []
 
         for i, layer in enumerate(self.hidden_layers):
-            print ".. Building valid model for layer: %i" % i
-            prob_fns.append(layer.get_prob_fn())
-            embed_fns.append(layer.get_embedding_fn())
+            print ".. Building valid model for layer: %d" % i
+            prob_fns.append(layer.get_prob_fn(layer.l, layer.W_prob, layer.b_prob))
+            embed_fns.append(layer.get_embedding_fn(layer.l, layer.W_l, layer.b_l))
 
         return (prob_fns, embed_fns)
 
@@ -169,6 +169,7 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
     ###############
     print '... training the model'
 
+    import pdb;pdb.set_trace()
     best_validation_pp = np.inf
 
     done_looping = False
@@ -187,23 +188,19 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
                 continue
 
             comp_train_fn, embed_train_fn = fns[len(sentence) - 2]
-            c_cost, e_cost = (comp_train_fn(sentence, 0.2, learning_rate),
-                              embed_train_fn(sentence, learning_rate))
-            print(
-                '[learning embedding] epoch %i >> %2.2f%' % (
-                    epoch, (i + 1) * 100. / n_train) +
-                'completed in %.2f (sec) costs >> (%2.2f, %2.2f) <<\r' % (
-                    time.time() - tic, c_cost, e_cost)),
+            c_cost, e_cost =  (comp_train_fn(sentence, 0.2, learning_rate),
+                               embed_train_fn(sentence, learning_rate))
+            print('[learning embedding]' +
+                'epoch %d >> %2.2f%% completed in %.2f (sec) costs >> (%2.2f, %2.2f)\r' % (
+                    epoch, ((i + 1) * 100.)/n_train, time.time() - tic, c_cost, e_cost)),
             sys.stdout.flush()
 
             te_cost += e_cost
             tc_cost += c_cost
 
-        print(
-            '[learning embedding] epoch %i >> %2.2f%' % (
-                epoch, (i + 1) * 100. / n_train) +
-            'completed in %.2f (sec) T cost >> (%2.2f, %2.2f)<<\r' % (
-                time.time() - tic, tc_cost, tc_cost, te_cost))
+        print('[learning embedding] ' +
+        'epoch %d >> completed in %2.2f (sec) T cost >> (%2.2f, %2.2f)<<\r' % (
+            epoch, time.time() - tic, tc_cost, te_cost))
         sys.stdout.flush()
 
         #tic = time.time()
@@ -219,14 +216,14 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
         #    tc_cost += c_cost
 
         #    print(
-        #        '[learning composition] epoch %i >> %2.2f%' % (
+        #        '[learning composition] epoch %d >> %2.2f%' % (
         #            epoch, (i + 1) * 100. / n_train) +
         #        'completed in %.2f (sec) cost >> %2.2f <<\r' % (
         #            time.time() - tic, c_cost)),
         #    sys.stdout.flush()
 
         #print(
-        #    '[learning composition] epoch %i >> %2.2f%' % (
+        #    '[learning composition] epoch %d >> %2.2f%' % (
         #        epoch, (i + 1) * 100. / n_train) +
         #    'completed in %.2f (sec) T cost >> %2.2f <<' % (
         #        time.time() - tic, tc_cost))
@@ -247,19 +244,16 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
                 p = prob_fns[j](x, x0, p, p0)
             t /= pow(p[0], 1./len(sentence))
 
-            print(
-                '[validation] epoch %i >> %2.2f%' % (
-                    epoch, (i + 1) * 100. / n_train) +
-                'completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                    time.time() - tic, t)),
+            print('[validation]' +
+                'epoch %d >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                    epoch, (i + 1) * 100. / n_train, time.time() - tic, t)),
             sys.stdout.flush()
 
         valid_pp = pow(t, 1./n_valid)
         print(
-            '[validation] epoch %i >> %2.2f%' % (
-                epoch, (i + 1) * 100. / n_train) +
-            'completed in %.2f (sec) T cost >> %2.2f <<' % (
-                time.time() - tic, valid_pp))
+            '[validation]' +
+            'epoch %d completed in %.2f (sec) T cost >> %2.2f <<' % (
+                epoch, time.time() - tic, valid_pp))
 
         # if we got the best validation score until now
         if valid_pp < best_validation_pp:

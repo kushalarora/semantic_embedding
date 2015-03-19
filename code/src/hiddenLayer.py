@@ -276,6 +276,7 @@ if __name__ == '__main__':
                 size=(6,))),
         borrow=True)
 
+    import pdb;pdb.set_trace()
     hl = HiddenLayer(
         np.random.RandomState(3),
         X,
