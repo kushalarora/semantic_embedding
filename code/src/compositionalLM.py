@@ -1,6 +1,6 @@
 import theano
 import numpy as np
-import theano.tensor as T
+# import theano.tensor as T
 import time
 import sys
 from hiddenLayer import HiddenLayer
@@ -159,11 +159,10 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
         numpy_rng, X, P, n, L)
 
     print "Building Model Completed in %2.2f secs" % (time.time() - tic)
-    import pdb;pdb.set_trace()
+    # import pdb;pdb.set_trace()
     fns = cLM.training_fns()
 
     prob_fns, embed_fns = cLM.prob_embedding_fn()
-
 
     ###############
     # TRAIN MODEL #
@@ -204,6 +203,7 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
             epoch, time.time() - tic, tc_cost, te_cost))
         sys.stdout.flush()
 
+<<<<<<< Updated upstream
         #tic = time.time()
         #tc_cost = 0.0
         #for i, sentence in enumerate(S_train):
@@ -228,6 +228,32 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
         #        epoch, (i + 1) * 100. / n_train) +
         #    'completed in %.2f (sec) T cost >> %2.2f <<' % (
         #        time.time() - tic, tc_cost))
+=======
+        # tic = time.time()
+        # tc_cost = 0.0
+        # for i, sentence in enumerate(S_train):
+        #     c_cost = 0.0
+        #     for j in xrange(len(sentence) - 1):
+        #         cost, _ = c_fns[j](sentence[j],
+        #                            sentence[0],
+        #                            sentence[j+1],
+        #                            learning_rate)
+        #         c_cost += np.sqrt(cost)
+        #     tc_cost += c_cost
+
+        #     print(
+        #         '[learning composition] epoch %i >> %2.2f%' % (
+        #             epoch, (i + 1) * 100. / n_train) +
+        #         'completed in %.2f (sec) cost >> %2.2f <<\r' % (
+        #             time.time() - tic, c_cost)),
+        #     sys.stdout.flush()
+
+        # print(
+        #     '[learning composition] epoch %i >> %2.2f%' % (
+        #         epoch, (i + 1) * 100. / n_train) +
+        #     'completed in %.2f (sec) T cost >> %2.2f <<' % (
+        #         time.time() - tic, tc_cost))
+>>>>>>> Stashed changes
 
         tic = time.time()
         t = 1.0
