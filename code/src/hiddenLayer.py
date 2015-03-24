@@ -122,14 +122,10 @@ class HiddenLayer:
                  W_prob=None,
                  b_prob=None):
 
+
         self.l = l
         self.X = X
         self.P = P
-
-        self.composite_comp_params = T.copy(composite_comp_params)
-        self.composite_embed_params = T.copy(composite_embed_params)
-        self.composite_g_comp_params = T.copy(composite_g_comp_params)
-        self.composite_g_embed_params = T.copy(composite_g_embed_params)
 
         if W_prob is None:
             initial_W_prob = np.asarray(
@@ -168,41 +164,51 @@ class HiddenLayer:
         self.W_l = theano.shared(value=W_l_initial, name='W_%d' % l,
                                  borrow=True)
 
-        self.comp_params = [self.W_prob, self.b_prob, self.X]
-
-        self.embed_params = [self.W_l, self.b_l]
-
-        self.embed_cost = HiddenLayer._get_embedding_cost(l, self.W_l,
-                                                          self.b_l, self.X)
+        ########## Compositional Parameters ################
 
         self.comp_cost = HiddenLayer._get_composition_cost(l, self.W_prob,
                                                            self.b_prob,
                                                            self.X, self.P)
-
-        self.composite_embed_cost = self.embed_cost
-
-        if composite_embed_cost is not None:
-            self.composite_embed_cost += composite_embed_cost
-
         self.composite_comp_cost = self.comp_cost
-
         if composite_comp_cost is not None:
             self.composite_comp_cost += composite_comp_cost
 
-        self.composite_embed_params.extend(self.embed_params)
+        self.comp_params = [self.W_prob, self.b_prob, self.X]
 
-        if len(self.composite_comp_params) == 0:
-            self.composite_comp_cost.extend(self.comp_cost)
+        if len(composite_comp_params) == 0:
+            composite_comp_params = self.comp_params
 
-        g_comp_params = [T.grad(self.comp_cost, param)
-                         for param in self.comp_params]
+        self.composite_comp_params = T.copy(composite_comp_params)
 
-        g_embed_params = [T.grad(self.embed_cost, param)
-                          for param in self.embed_cost]
+        if len(composite_g_comp_params) == 0:
+            composite_g_comp_params = np.zeros((len(self.composite_comp_params)))
 
-        self.composite_g_embed_params.extend(g_embed_params)
+        self.g_comp_params = [T.grad(self.comp_cost, param)
+                              for param in self.comp_params]
 
-        self.composite_g_comp_params += g_comp_params
+        self.composite_g_comp_params = [a + b
+                                        for a, b in zip(composite_g_comp_params,
+                                                        self.g_comp_params)]
+
+
+        ######### Embedding Parameters #######################
+
+        self.embed_cost = HiddenLayer._get_embedding_cost(l, self.W_l,
+                                                          self.b_l, self.X)
+
+        self.composite_embed_cost = self.embed_cost
+        if composite_embed_cost is not None:
+            self.composite_embed_cost += composite_embed_cost
+
+        self.embed_params = [self.W_l, self.b_l]
+
+        self.composite_embed_params = composite_embed_params + self.embed_params
+
+        self.g_embed_params = [T.grad(self.embed_cost, param)
+                               for param in self.embed_params]
+
+        self.composite_g_embed_params = composite_g_embed_params + self.g_embed_params
+
 
     def composite_train_fns(self):
 
@@ -282,9 +288,7 @@ if __name__ == '__main__':
                 high=0.1,
                 size=(6,))),
         borrow=True)
-    import pdb;pdb.set_trace()
 
-    import pdb;pdb.set_trace()
     hl = HiddenLayer(
         np.random.RandomState(3),
         X,

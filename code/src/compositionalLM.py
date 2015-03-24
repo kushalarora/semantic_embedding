@@ -59,6 +59,10 @@ class CompositionalLM:
 
         composite_embed_params = []
 
+        composite_g_comp_params = []
+
+        composite_g_embed_params = []
+
         for i in xrange(1, L + 1):
             hidden_layer = HiddenLayer(
                 numpy_rng,
@@ -68,6 +72,8 @@ class CompositionalLM:
                 composite_comp_cost,
                 composite_embed_params,
                 composite_comp_params,
+                composite_g_comp_params,
+                composite_g_embed_params,
                 i,
                 n,
                 self.W_prob,
@@ -82,6 +88,10 @@ class CompositionalLM:
             composite_embed_params = hidden_layer.composite_embed_params
 
             composite_comp_params = hidden_layer.composite_comp_params
+
+            composite_g_comp_params = hidden_layer.composite_g_comp_params
+
+            composite_g_embed_params = hidden_layer.composite_g_embed_params
 
     def training_fns(self):
         fns = []
@@ -103,7 +113,7 @@ class CompositionalLM:
 
 
 def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
-          dataset_train='../data/train2', dataset_valid='../data/valid2',
+          dataset_train='../data/train', dataset_valid='../data/valid',
           batch_size=600):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear
@@ -158,18 +168,16 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
     cLM = CompositionalLM(
         numpy_rng, X, P, n, L)
 
-    print "Building Model Completed in %2.2f secs" % (time.time() - tic)
-    # import pdb;pdb.set_trace()
     fns = cLM.training_fns()
 
     prob_fns, embed_fns = cLM.prob_embedding_fn()
 
+    print ".. Building model completed in %2.2f secs" % (time.time() - tic)
     ###############
     # TRAIN MODEL #
     ###############
     print '... training the model'
 
-    import pdb;pdb.set_trace()
     best_validation_pp = np.inf
 
     done_looping = False
@@ -203,32 +211,6 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
             epoch, time.time() - tic, tc_cost, te_cost))
         sys.stdout.flush()
 
-<<<<<<< Updated upstream
-        #tic = time.time()
-        #tc_cost = 0.0
-        #for i, sentence in enumerate(S_train):
-        #    c_cost = 0.0
-        #    for j in xrange(len(sentence) - 1):
-        #        cost, _ = c_fns[j](sentence[j],
-        #                           sentence[0],
-        #                           sentence[j+1],
-        #                           learning_rate)
-        #        c_cost += np.sqrt(cost)
-        #    tc_cost += c_cost
-
-        #    print(
-        #        '[learning composition] epoch %d >> %2.2f%' % (
-        #            epoch, (i + 1) * 100. / n_train) +
-        #        'completed in %.2f (sec) cost >> %2.2f <<\r' % (
-        #            time.time() - tic, c_cost)),
-        #    sys.stdout.flush()
-
-        #print(
-        #    '[learning composition] epoch %d >> %2.2f%' % (
-        #        epoch, (i + 1) * 100. / n_train) +
-        #    'completed in %.2f (sec) T cost >> %2.2f <<' % (
-        #        time.time() - tic, tc_cost))
-=======
         # tic = time.time()
         # tc_cost = 0.0
         # for i, sentence in enumerate(S_train):
@@ -253,7 +235,6 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
         #         epoch, (i + 1) * 100. / n_train) +
         #     'completed in %.2f (sec) T cost >> %2.2f <<' % (
         #         time.time() - tic, tc_cost))
->>>>>>> Stashed changes
 
         tic = time.time()
         t = 1.0
@@ -296,4 +277,4 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
 
 
 if __name__ == "__main__":
-    train(n=10, L=5)
+    train(n=10, L=50)
