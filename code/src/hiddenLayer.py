@@ -31,6 +31,17 @@ class HiddenLayer:
     @staticmethod
     def _get_comp_probability(l, W_prob, b_prob,
                               X_l_1, X_1, P_l_1, P_1):
+        """ Returns probability for level l.
+            The probability is computed as
+
+            (p_i)^l = H(G(X_i^{l-1}, X_{i+l}^1; W_prob, b_prob),
+                        P_i^{l-1}, P_1)
+
+            P(w_i^l/w_i^{l-1}w_{i+1}^1) = sigmoid(w_1^T * W_prob * w_2 +
+                                                  b_prob)
+
+            (p_i)^l = P(w_i^l/w_i^{l-1}w_{i+1}^1) * p_i^{l-1} * p_{i+l}^1
+        """
         P_y_x, updates = theano.scan(
 
             lambda x_i, x_i_l:
@@ -52,6 +63,12 @@ class HiddenLayer:
 
     @staticmethod
     def _get_embeddings(l, W_l, b_l, X_l_1, X_1):
+        """ Returns the embedding X_i^l from X_i^{l-1} and
+            X_{i+l}^1
+
+            X_i^l = W_l[X_i^{l-1} X_{i+l}^1]^T + b_l
+
+        """
         embeddings, updates = theano.scan(
             lambda x_l_1, x_1:
                 T.tanh(T.dot(W_l,
@@ -62,28 +79,22 @@ class HiddenLayer:
         return pad_embedding(embeddings, X_1.shape[0])
 
     @staticmethod
-    def get_prob_fn(l, W_prob, b_prob):
-        return theano.function(
-            inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1,
-                    HiddenLayer.P_l_1, HiddenLayer.P_1],
-            outputs=HiddenLayer._get_comp_probability(l, W_prob,
-                                                      b_prob,
-                                                      HiddenLayer.X_l_1,
-                                                      HiddenLayer.X_1,
-                                                      HiddenLayer.P_l_1,
-                                                      HiddenLayer.P_1),
-            )
-
-    @staticmethod
-    def get_embedding_fn(l, W_l, b_l):
-        return theano.function(
-            inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1],
-            outputs=HiddenLayer._get_embeddings(l, W_l, b_l,
-                                                HiddenLayer.X_l_1,
-                                                HiddenLayer.X_1))
+    def _get_embedding_cost(l, W_l, b_l, X):
+        """ Squared error minimization error
+            training objective
+        """
+        X_1 = X[HiddenLayer.W[0]]
+        X_l_1 = X[HiddenLayer.W[l-1]]
+        X_l = X[HiddenLayer.W[l]]
+        X_le = HiddenLayer._get_embeddings(l, W_l, b_l, X_l_1, X_1)
+        return T.sqrt(T.sum((X_l[:-l] - X_le[:-l])**2))
 
     @staticmethod
     def _get_composition_cost(l, W_prob, b_prob, X, P):
+        """ Cross entropy minimization objective function for level l.
+            Doing L2 regularization
+            Summing P_i^l over i for normalization.
+        """
         X_1 = X[HiddenLayer.W[0]]
         X_l_1 = X[HiddenLayer.W[l-1]]
         P_1 = P[HiddenLayer.W[0]]
@@ -100,12 +111,31 @@ class HiddenLayer:
         return T.mean(L)
 
     @staticmethod
-    def _get_embedding_cost(l, W_l, b_l, X):
-        X_1 = X[HiddenLayer.W[0]]
-        X_l_1 = X[HiddenLayer.W[l-1]]
-        X_l = X[HiddenLayer.W[l]]
-        X_le = HiddenLayer._get_embeddings(l, W_l, b_l, X_l_1, X_1)
-        return T.sqrt(T.sum((X_l[:-l] - X_le[:-l])**2))
+    def get_prob_fn(l, W_prob, b_prob):
+        """ Returns function to get probability for n-gram
+            w_i^l from w_i^{l-1} and w_{i+l}^1
+        """
+        return theano.function(
+            inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1,
+                    HiddenLayer.P_l_1, HiddenLayer.P_1],
+            outputs=HiddenLayer._get_comp_probability(l, W_prob,
+                                                      b_prob,
+                                                      HiddenLayer.X_l_1,
+                                                      HiddenLayer.X_1,
+                                                      HiddenLayer.P_l_1,
+                                                      HiddenLayer.P_1),
+            )
+
+    @staticmethod
+    def get_embedding_fn(l, W_l, b_l):
+        """ Returns function to get embedding for n-gram X_i^l
+            from X_i^{l-1} and X_{i+l}^1
+        """
+        return theano.function(
+            inputs=[HiddenLayer.X_l_1, HiddenLayer.X_1],
+            outputs=HiddenLayer._get_embeddings(l, W_l, b_l,
+                                                HiddenLayer.X_l_1,
+                                                HiddenLayer.X_1))
 
     def __init__(self,
                  numpy_rng,
@@ -121,7 +151,6 @@ class HiddenLayer:
                  n=50,
                  W_prob=None,
                  b_prob=None):
-
 
         self.l = l
         self.X = X
@@ -164,7 +193,7 @@ class HiddenLayer:
         self.W_l = theano.shared(value=W_l_initial, name='W_%d' % l,
                                  borrow=True)
 
-        ########## Compositional Parameters ################
+        """ ########## Compositional Parameters ################ """
 
         self.comp_cost = HiddenLayer._get_composition_cost(l, self.W_prob,
                                                            self.b_prob,
@@ -181,17 +210,18 @@ class HiddenLayer:
         self.composite_comp_params = T.copy(composite_comp_params)
 
         if len(composite_g_comp_params) == 0:
-            composite_g_comp_params = np.zeros((len(self.composite_comp_params)))
+            composite_g_comp_params = np.zeros(
+                (len(self.composite_comp_params)))
 
         self.g_comp_params = [T.grad(self.comp_cost, param)
                               for param in self.comp_params]
 
         self.composite_g_comp_params = [a + b
-                                        for a, b in zip(composite_g_comp_params,
-                                                        self.g_comp_params)]
+                                        for a, b in
+                                            zip(composite_g_comp_params,
+                                                self.g_comp_params)]
 
-
-        ######### Embedding Parameters #######################
+        """ ######### Embedding Parameters ####################### """
 
         self.embed_cost = HiddenLayer._get_embedding_cost(l, self.W_l,
                                                           self.b_l, self.X)
@@ -202,13 +232,14 @@ class HiddenLayer:
 
         self.embed_params = [self.W_l, self.b_l]
 
-        self.composite_embed_params = composite_embed_params + self.embed_params
+        self.composite_embed_params = (composite_embed_params +
+                                       self.embed_params)
 
         self.g_embed_params = [T.grad(self.embed_cost, param)
                                for param in self.embed_params]
 
-        self.composite_g_embed_params = composite_g_embed_params + self.g_embed_params
-
+        self.composite_g_embed_params = (composite_g_embed_params +
+                                         self.g_embed_params)
 
     def composite_train_fns(self):
 
@@ -218,7 +249,9 @@ class HiddenLayer:
 
         embed_updates = [(param, param - HiddenLayer.lr * gparam)
                          for param, gparam in zip(self.composite_embed_params,
-                                                  self.composite_g_embed_params)]
+                                                  self.composite_g_embed_params
+                                                  )
+                         ]
 
         embed_train_fn = theano.function([HiddenLayer.W, HiddenLayer.lr],
                                          outputs=self.composite_embed_cost,
