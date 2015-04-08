@@ -12,10 +12,13 @@ class CompositionalLM:
                  numpy_rng,
                  X,
                  P,
+                 M,
                  n=50,
                  L=200,
                  W_prob=None,
-                 b_prob=None):
+                 b_prob=None,
+                 W_L=None,
+                 b_L=None):
 
         if W_prob is None:
             initial_W_prob = np.asarray(
@@ -35,84 +38,63 @@ class CompositionalLM:
                 value=0.0,
                 name='b_prob')
 
+        if W_L is None:
+            initial_W_L = np.asarray(
+                numpy_rng.uniform(
+                    low=-4 * np.sqrt(6./(3 * n + L)),
+                    high=4 * np.sqrt(6./(3 * n + L)),
+                    size=(L, n, 2*n)),
+                dtype=theano.config.floatX)
+
+            W_L = theano.shared(
+                value=initial_W_L,
+                name='W_L',
+                borrow=True)
+
+        if b_L is None:
+            b_L = theano.shared(
+                np.asarray(
+                    numpy_rng.uniform(
+                        low=-4 * np.sqrt(6/(n + L)),
+                        high=4 * np.sqrt(6/(n + L)),
+                        size=(L, n)),
+                    dtype=theano.config.floatX),
+                name='b_L',
+                borrow=True)
+
         self.W_prob = W_prob
 
         self.b_prob = b_prob
+
+        self.W_L = W_L
+
+        self.b_L = b_L
 
         self.X = X
 
         self.P = P
 
+        self.M = M
+
         self.n = n
 
         self.L = L
 
-        self.comp_params = [self.W_prob, self.b_prob]
-
-        self.hidden_layers = []
-
-        composite_comp_cost = None
-
-        composite_embed_cost = None
-
-        composite_comp_params = [self.W_prob, self.b_prob, self.X]
-
-        composite_embed_params = []
-
-        composite_g_comp_params = []
-
-        composite_g_embed_params = []
-
-        for i in xrange(1, L + 1):
-            hidden_layer = HiddenLayer(
-                numpy_rng,
-                self.X,
-                self.P,
-                composite_embed_cost,
-                composite_comp_cost,
-                composite_embed_params,
-                composite_comp_params,
-                composite_g_comp_params,
-                composite_g_embed_params,
-                i,
-                n,
-                self.W_prob,
-                self.b_prob)
-
-            self.hidden_layers.append(hidden_layer)
-
-            composite_comp_cost = hidden_layer.composite_comp_cost
-
-            composite_embed_cost = hidden_layer.composite_embed_cost
-
-            composite_embed_params = hidden_layer.composite_embed_params
-
-            composite_comp_params = hidden_layer.composite_comp_params
-
-            composite_g_comp_params = hidden_layer.composite_g_comp_params
-
-            composite_g_embed_params = hidden_layer.composite_g_embed_params
-
     def training_fns(self):
-        fns = []
-        for i in xrange(self.L):
-            print ".. building training fn of layer %d" % i
-            fns.append(self.hidden_layers[i].composite_train_fns())
-        return fns
+        return HiddenLayer.training_fns(self.W_L, self.b_L,
+                                        self.W_prob, self.b_prob,
+                                        self. X, self.P)
 
     def prob_embedding_fn(self):
-        prob_fns = []
-        embed_fns = []
+        prob_fn = HiddenLayer.probability_function(self.W_prob,
+                                                   self.b_prob)
+        embed_fn = HiddenLayer.embedding_function(self.W_L,
+                                                  self.b_L)
 
-        for i, layer in enumerate(self.hidden_layers):
-            print ".. Building valid model for layer: %d" % i
-            prob_fns.append(layer.get_prob_fn(layer.l, layer.W_prob, layer.b_prob))
-            embed_fns.append(layer.get_embedding_fn(layer.l, layer.W_l, layer.b_l))
-
-        return (prob_fns, embed_fns)
+        return (prob_fn, embed_fn)
 
 
-def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
+def train(learning_rate=0.0, n=50, L=200, n_epochs=50,
           dataset_train='../data/train', dataset_valid='../data/valid',
           batch_size=600):
     """
@@ -133,8 +115,7 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
      http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz
      """
 
-    S_train, V, Vindex, P = build_vocab(dataset_train, L)
-
+    S_train, V, Vindex, P, neighbors = build_vocab(dataset_train, L)
     S_valid = index_data(dataset_valid, Vindex)
 
     n_train = len(S_train)
@@ -163,14 +144,30 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
         name='P',
         borrow=True)
     tic = time.time()
+
+    M_initial = []
+    for neighbor in neighbors:
+        m = []
+        for neigh in neighbor:
+            if len(neigh) == 0:
+                m.append(np.zeros((n)))
+            else:
+                m.append(np.mean(X_initial[neigh], axis=0))
+        M_initial.append(m)
+
+    M = theano.shared(
+        value=np.asarray(M_initial),
+        name='M',
+        borrow=True)
+
     print ".. Building Model"
 
     cLM = CompositionalLM(
-        numpy_rng, X, P, n, L)
+        numpy_rng, X, P, M, n, L)
 
-    fns = cLM.training_fns()
+    composition_train_fn, entropy_train_fn = cLM.training_fns()
 
-    prob_fns, embed_fns = cLM.prob_embedding_fn()
+    prob_fn, embed_fn = cLM.prob_embedding_fn()
 
     print ".. Building model completed in %2.2f secs" % (time.time() - tic)
     ###############
@@ -183,33 +180,39 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
     done_looping = False
     epoch = 0
     while (epoch < n_epochs) and (not done_looping):
-
+        print "Epoch Number: %d of %d" % (epoch, n_epochs)
         tic = time.time()
         epoch = epoch + 1
 
-        np.random.shuffle(S_train)
+        # np.random.shuffle(S_train)
         te_cost = 0.0
         tc_cost = 0.0
+        import pdb
         for i, sentence in enumerate(S_train):
-            s_len = len(sentence)
-            if s_len == 1:
-                continue
+            try:
+                s_len = len(sentence)
+                if s_len < 2:
+                    continue
 
-            comp_train_fn, embed_train_fn = fns[len(sentence) - 2]
-            c_cost, e_cost =  (comp_train_fn(sentence, 0.2, learning_rate),
-                               embed_train_fn(sentence, learning_rate))
-            print('[learning embedding]' +
-                'epoch %d >> %2.2f%% completed in %.2f (sec) costs >> (%2.2f, %2.2f)\r' % (
-                    epoch, ((i + 1) * 100.)/n_train, time.time() - tic, c_cost, e_cost)),
-            sys.stdout.flush()
+                c_costs, e_costs = (entropy_train_fn(sentence, s_len,
+                                                     0.2, learning_rate),
+                                    composition_train_fn(sentence, s_len,
+                                                         learning_rate))
+                if np.isnan(np.min(c_costs)) or np.isnan(np.min(e_costs)):
+                    pdb.set_trace()
+                print('[learning embedding]' +
+                      '%2.2d/%2.2d in %.2f (sec) costs>>(%2.2f, %2.2f)\r' % (
+                          (i + 1), n_train, time.time() - tic,
+                          c_costs[-1], e_costs[-1])),
 
-            te_cost += e_cost
-            tc_cost += c_cost
+                te_cost += e_costs[-1]
+                tc_cost += c_costs[-1]
+            except:
+                pdb.set_trace()
 
         print('[learning embedding] ' +
-        'epoch %d >> completed in %2.2f (sec) T cost >> (%2.2f, %2.2f)<<\r' % (
-            epoch, time.time() - tic, tc_cost, te_cost))
-        sys.stdout.flush()
+              '# %2.2d completed in %2.2f (sec) T cost >> (%2.2f, %2.2f)<<' % (
+                  i, time.time() - tic, tc_cost, te_cost))
 
         # tic = time.time()
         # tc_cost = 0.0
@@ -247,14 +250,14 @@ def train(learning_rate=0.13, n=50, L=200, n_epochs=50,
             p = P_vals[sentence]
             p0 = P_vals[sentence]
 
-            for j in xrange(len(sentence) - 1):
-                x = embed_fns[j](x, x0)
-                p = prob_fns[j](x, x0, p, p0)
+            for j in xrange(1, len(sentence)):
+                x = embed_fn(j, x, x0)
+                p = prob_fn(j, x, x0, p, p0)
             t /= pow(p[0], 1./len(sentence))
 
             print('[validation]' +
-                'epoch %d >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                    epoch, (i + 1) * 100. / n_train, time.time() - tic, t)),
+                  '%2.2d/%2.2d completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                      (i + 1), n_train, time.time() - tic, t)),
             sys.stdout.flush()
 
         valid_pp = pow(t, 1./n_valid)

@@ -4,6 +4,7 @@ import numpy as np
 def build_vocab(filename, L):
     vocab = [None]
     vocab_dict = {0:  None}
+    neighbors = []   # neighboring words and n_grams
     prob = [0]
     S = []
     count = [0]
@@ -30,11 +31,17 @@ def build_vocab(filename, L):
 
                     vocab.append(phrase)
                     vocab_dict[phrase] = index
+                    neighbors.append([[], []])
 
                     index += 1
 
                     prob.append(0.)
                     count.append(0)
+                    if i > 0:
+                        prefix_id = vocab_dict[" ".join(words[j:j + i])]
+                        suffix_id = vocab_dict[words[j + i]]
+                        neighbors[prefix_id][1].append(suffix_id)
+                        neighbors[suffix_id][0].append(prefix_id)
 
                 id = vocab_dict[phrase]
                 count[id] += 1.
@@ -43,14 +50,14 @@ def build_vocab(filename, L):
                 s_l[j] = id
 
             sentence.append(np.asarray(s_l))
-
         S.append(np.asarray(sentence))
 
     for i, phrase in enumerate(vocab[1:]):
         n = len(phrase.split()) - 1
         prob[i] = count[i]/nCount[n]
 
-    return (np.asarray(S), np.asarray(vocab), vocab_dict, np.asarray(prob))
+    return (np.asarray(S), np.asarray(vocab), vocab_dict,
+            np.asarray(prob), neighbors)
 
 
 def index_data(filename, Vindex):
