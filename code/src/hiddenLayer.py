@@ -45,8 +45,7 @@ class HiddenLayer:
         P_y_x, updates = theano.scan(
 
             lambda x_i, x_i_l:
-                T.exp(-1 *
-                    T.dot(T.dot(x_i, W_prob), x_i_l) + b_prob),
+                T.exp(-1 * T.dot(T.dot(x_i, W_prob), x_i_l) + b_prob),
 
             sequences=[X_l_1, X_1])
 
