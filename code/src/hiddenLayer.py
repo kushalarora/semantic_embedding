@@ -223,6 +223,14 @@ class HiddenLayer:
 
         return (composition_function, entropy_function)
 
+    def __init__(self, l, x_l_1, x_0):
+        self.x_l_1 = x_l_1
+        self.x_0 = x_0
+        self.x_l = HiddenLayer._embeddings(x_l_1, x_0)
+
+    def energies(self):
+        pass
+
 
 def pad_embedding(seq, length):
     pad_size = length - seq.shape[0]

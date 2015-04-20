@@ -1,6 +1,6 @@
 CC = g++
 WEIGHTTYPE = float
-CFLAGS = -D WEIGHTTYPE=$(WEIGHTTYPE) -lm -O2 -Wall -funroll-loops -ffast-math
+CFLAGS = -D WEIGHTTYPE=$(WEIGHTTYPE) -lm -g -O0 -Wall -funroll-loops -ffast-math
 #CFLAGS = -lm -O2 -Wall
 
 all: rnnlmlib.o rnnlm

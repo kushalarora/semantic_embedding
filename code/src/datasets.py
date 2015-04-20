@@ -1,5 +1,63 @@
 import numpy as np
 
+def load_data(dataset_dir):
+
+    if dataset_dir is None:
+        raise IOError("Dataset Dir Not Found")
+
+    filenames = [os.path.join(dataset_dir, fname)
+                 for fname in ['train', 'valid', 'test']]
+
+    vocab = ['UNK']
+    vocab_dict = {'UNK': 0}
+
+    fin = open(filenames[0])
+    fval = open(filenames[1])
+    ftest = open(filenames[2])
+
+    train = []
+    test = []
+    valid = []
+
+    if fin is None:
+        raise IOError("Filename %s not found" % filename)
+
+    for line in fin:
+        words = line.split()
+        s = []    
+
+        for word in words:
+            if word not in vocab_dict:
+                vocab_dict[len(vocab)] = word
+                vocab.append(word)
+
+            index = vocab_dict[word]
+            s.append(index)
+        train.append(np.asarray(s))
+    
+    val_test_files = [fval, ftest]
+    val_test_data = [valid, test]
+
+    for file, data in zip(val_test_files, val_test_data):
+        if file is None:
+            continue
+        for line in fin:
+            words = line.split()
+            s = []
+
+            for word in words:
+                index = vocab_dict[word] 
+                            if word in vocab_dict 
+                            else 0
+                s.append(index)
+            data.append(np.asarray(s))
+
+    return (np.asarray(train), 
+            np.asarray(valid), 
+            np.asarray(test), 
+            np.asarray(vocab), 
+            vocab_dict)
+
 
 def build_vocab(filename, L):
     vocab = [None]
