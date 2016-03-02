@@ -1,56 +1,27 @@
 import numpy as np
 
 
-def build_vocab(filename, L):
+def build_vocab(filename):
     vocab = [None]
-    vocab_dict = {0:  None}
-    prob = [0]
+    vocab_dict = {None: 0}
     S = []
-    count = [0]
-    nCount = [0] * L
     fin = open(filename)
     if fin is None:
         raise IOError("Filename %s not found" % filename)
 
     index = 1
     for line in fin:
-
         words = line.split()
         sentence = []
-
-        for i in xrange(len(words)):
-
-            s_l = np.array([0] * len(words))
-
-            for j in xrange(len(words) - i):
-
-                phrase = " ".join(words[j:j + i + 1])
-
-                if phrase not in vocab_dict:
-
-                    vocab.append(phrase)
-                    vocab_dict[phrase] = index
-
-                    index += 1
-
-                    prob.append(0.)
-                    count.append(0)
-
-                id = vocab_dict[phrase]
-                count[id] += 1.
-                nCount[i] += 1.
-
-                s_l[j] = id
-
-            sentence.append(np.asarray(s_l))
-
-        S.append(np.asarray(sentence))
-
-    for i, phrase in enumerate(vocab[1:]):
-        n = len(phrase.split()) - 1
-        prob[i] = count[i]/nCount[n]
-
-    return (np.asarray(S), np.asarray(vocab), vocab_dict, np.asarray(prob))
+        for i, word in enumerate(words):
+            if word not in vocab_dict:
+                vocab_dict[word] = index
+                vocab.append(word)
+                index += 1
+            idx = vocab_dict[word]
+            sentence.append(idx)
+        S.append(sentence)
+    return (S, vocab, vocab_dict)
 
 
 def index_data(filename, Vindex):
@@ -67,28 +38,19 @@ def index_data(filename, Vindex):
         words = line.split()
         sentence = []
 
-        missing_vocab = False
         for word in words:
-            if word not in Vindex:
-                print "Missing: (%s, ##%s##)" % (word, line)
-                missing_vocab = True
-                break
-
-        if missing_vocab:
-            continue
-
-        for word in words:
-
             try:
                 id = Vindex[word]
             except KeyError:
-                continue
+                word = None
+                id = 0;
 
             if id is None:
-                raise RuntimeError("Word: %s missing in vocabulary" % word)
+                raise RuntimeError(
+                    "Word: %s missing in vocabulary" % word)
 
             sentence.append(id)
 
-        S.append(np.asarray(sentence))
+        S.append(sentence)
 
-    return np.asarray(S)
+    return S
