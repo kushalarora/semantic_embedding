@@ -20,13 +20,14 @@ if __name__ == "__main__":
     parser.add_argument('--trnd', type=int, help='training distortion level', default=10)
     parser.add_argument('--tstd', type=int, help='test distortion level', default=30)
     parser.add_argument('--l2reg', type=int, help='lambda l2 reg value', default=0.001)
+    parser.add_argument('--pct', type=float, help='Percentage of training data to use', default=100)
 
     args = parser.parse_args()
     N = args.n
 
     if (args.mode == MODE_TRAIN):
         train(args.l, args.n, args.epochs, args.train,
-                args.trnd, args.tstd, args.valid, args.l2reg)
+                args.trnd, args.tstd, args.valid, args.l2reg, args.pct)
 
 
     if args.mode == MODE_TEST:

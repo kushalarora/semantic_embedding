@@ -153,7 +153,8 @@ class SentRNN(object):
 
 
 def train(learning_rate=0.2, n=50, n_epochs=5, dataset_train='../data/ptb.train.txt',
-            train_dist=10.0, valid_dist=30.0, dataset_valid='../data/ptb.valid.txt', l2reg=0.001):
+            train_dist=10.0, valid_dist=30.0, dataset_valid='../data/ptb.valid.txt',
+            l2reg=0.001, pct=100):
 
     folder_name = os.path.basename(__file__).split('.')[0]
     folder = os.path.join(os.path.dirname(__file__), folder_name)
@@ -202,8 +203,45 @@ def train(learning_rate=0.2, n=50, n_epochs=5, dataset_train='../data/ptb.train.
             X=X,
             V=V,
             Vindex=Vindex)
+
+    train_upto_idx = int(pct * n_train/100)
     print '... training the model'
     while (epoch < n_epochs) and (not done_looping):
+        tic = time.time()
+        epoch = epoch + 1
+
+        np.random.shuffle(S_train_pair)
+        te_cost = 0.0
+        run_upto_idx = pct * n_train
+        for i, sentence_pair in enumerate(S_train_pair):
+
+            if i > train_upto_idx:
+                break
+
+            assert len(sentence_pair[0]) == len(sentence_pair[1])
+            if len(sentence_pair[0]) < 2:
+                continue
+            try:
+                train_cost = sentRNN.hinge_loss_train_fn(
+                                sentence_pair[0],
+                                sentence_pair[1],
+                                learning_rate/(1 + .001 * epoch),
+                                l2reg)
+
+                te_cost += train_cost
+                print '[learning embedding] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
+                    epoch, (i + 1) * 100. / n_train, time.time() - tic, te_cost),
+                sys.stdout.flush()
+            except:
+                import pdb;pdb.set_trace()
+                print sentence_pair
+                raise
+
+        print '[learning embedding] epoch %i >> completed in %.2f (sec) T cost >> %2.2f <<\r' % (
+            epoch, time.time() - tic, te_cost/n_train)
+        sys.stdout.flush()
+        sentRNN.normalize()
+
         avg_valid_value = 0;
         for j in xrange(10):
             dist_valid = disform_sentences(dataset_valid, 100 - valid_dist,
@@ -219,6 +257,7 @@ def train(learning_rate=0.2, n=50, n_epochs=5, dataset_train='../data/ptb.train.
 
             tic = time.time()
             total_valid_cost = 0.0
+
             for i, sentence_pair in enumerate(S_valid_pair):
                 if len(sentence_pair[0]) < 2:
                     continue
@@ -243,36 +282,6 @@ def train(learning_rate=0.2, n=50, n_epochs=5, dataset_train='../data/ptb.train.
             with open('best_model.pkl', 'wb') as f:
                 pickle.dump(sentRNN, f)
 
-        tic = time.time()
-        epoch = epoch + 1
-
-        np.random.shuffle(S_train_pair)
-        te_cost = 0.0
-        for i, sentence_pair in enumerate(S_train_pair):
-            assert len(sentence_pair[0]) == len(sentence_pair[1])
-            if len(sentence_pair[0]) < 2:
-                continue
-            try:
-                train_cost = sentRNN.hinge_loss_train_fn(
-                                sentence_pair[0],
-                                sentence_pair[1],
-                                learning_rate/(1 + .001 * epoch),
-                                l2reg)
-
-                te_cost += train_cost
-                print '[learning embedding] epoch %i >> %2.2f%% completed in %.2f (sec) cost >> %2.2f <<\r' % (
-                    epoch, (i + 1) * 100. / n_train, time.time() - tic, te_cost),
-                sys.stdout.flush()
-            except:
-                import pdb;pdb.set_trace()
-                print sentence_pair
-                raise
-
-        print '[learning embedding] epoch %i >> completed in %.2f (sec) T cost >> %2.2f <<\r' % (
-            epoch, time.time() - tic, te_cost/n_train)
-        sys.stdout.flush()
-
-        sentRNN.normalize()
 
 def test(model_file=None, err_pct=30, dataset_test='../data/ptb.test.txt'):
     if model_file == None:
