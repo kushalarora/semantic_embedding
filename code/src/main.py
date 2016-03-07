@@ -16,10 +16,10 @@ if __name__ == "__main__":
                         default='../data/ptb.test.txt')
     parser.add_argument('--n', type=int, help='dimension of embedding space', default=100)
     parser.add_argument('--epochs', type=int, help='dimension of embedding space', default=20)
-    parser.add_argument('--l', type=int, help='learning rate', default=0.1)
+    parser.add_argument('--l', type=float, help='learning rate', default=0.1)
     parser.add_argument('--trnd', type=int, help='training distortion level', default=10)
     parser.add_argument('--tstd', type=int, help='test distortion level', default=30)
-    parser.add_argument('--l2reg', type=int, help='lambda l2 reg value', default=0.001)
+    parser.add_argument('--l2reg', type=float, help='lambda l2 reg value', default=0.001)
     parser.add_argument('--pct', type=float, help='Percentage of training data to use', default=100)
 
     args = parser.parse_args()
